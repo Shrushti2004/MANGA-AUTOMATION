@@ -5,3 +5,4 @@ visualized/
 .pytest_cache/
 build/
 curated_dataset/
+*.png
