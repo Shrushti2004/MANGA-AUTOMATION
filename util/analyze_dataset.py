@@ -449,6 +449,108 @@ def create_sample_visualization(valid_panels: List[Dict], categories: List[str],
     plt.show()
     print(f"サンプル画像を保存しました: {save_path}")
 
+def analyze_resolution_distribution(valid_panels: List[Dict], curated_dataset_path: str):
+    """解像度ごとの分布を分析"""
+    resolutions = []
+    
+    for panel in valid_panels:
+        panel_id = panel["id"]
+        
+        # 画像ファイルのパスを構築
+        parts = panel_id.split('_')
+        
+        # ディレクトリ名を決定
+        book_name = None
+        
+        # まず、実際のディレクトリが存在するかチェック
+        for i in range(1, min(4, len(parts))):
+            candidate_name = '_'.join(parts[:i])
+            candidate_path = os.path.join(curated_dataset_path, candidate_name)
+            if os.path.exists(candidate_path) and os.path.isdir(candidate_path):
+                # annotation.jsonが存在するかもチェック
+                annotation_path = os.path.join(candidate_path, "annotation.json")
+                if os.path.exists(annotation_path):
+                    book_name = candidate_name
+                    break
+        
+        # 見つからない場合は、従来の方法で推定
+        if book_name is None:
+            if len(parts) >= 4 and parts[1].startswith('vol'):
+                # "book_vol_page_frame_globalid" 形式
+                book_name = f"{parts[0]}_{parts[1]}"
+            else:
+                # "book_page_frame_globalid" 形式
+                book_name = parts[0]
+        
+        image_path = os.path.join(curated_dataset_path, book_name, f"{panel_id}.png")
+        
+        if os.path.exists(image_path):
+            try:
+                with Image.open(image_path) as img:
+                    width, height = img.size
+                    resolutions.append((width, height))
+            except Exception as e:
+                print(f"画像読み込みエラー {image_path}: {e}")
+    
+    return resolutions
+
+def create_resolution_scatter_plot(resolutions: List[Tuple[int, int]], save_path: str = "resolution_distribution.png"):
+    """解像度の散布図を作成"""
+    if not resolutions:
+        print("解像度データがありません")
+        return
+    
+    # データを分離
+    widths = [w for w, h in resolutions]
+    heights = [h for w, h in resolutions]
+    
+    # 散布図を作成
+    plt.figure(figsize=(12, 8))
+    
+    # 散布図を描画
+    plt.scatter(widths, heights, alpha=0.6, s=20)
+    
+    plt.title('パネル解像度の分布', fontsize=16)
+    plt.xlabel('幅 (ピクセル)', fontsize=12)
+    plt.ylabel('高さ (ピクセル)', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    
+    # 統計情報を表示
+    total_panels = len(resolutions)
+    avg_width = sum(widths) / total_panels
+    avg_height = sum(heights) / total_panels
+    min_width, max_width = min(widths), max(widths)
+    min_height, max_height = min(heights), max(heights)
+    
+    # 統計情報をテキストで表示
+    stats_text = f'総パネル数: {total_panels}\n'
+    stats_text += f'平均幅: {avg_width:.1f}px\n'
+    stats_text += f'平均高さ: {avg_height:.1f}px\n'
+    stats_text += f'幅範囲: {min_width}-{max_width}px\n'
+    stats_text += f'高さ範囲: {min_height}-{max_height}px'
+    
+    plt.text(0.02, 0.98, stats_text, transform=plt.gca().transAxes, 
+             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+    print(f"解像度分布図を保存しました: {save_path}")
+    
+    # コンソールにも統計情報を表示
+    print(f"\n解像度統計:")
+    print(f"総パネル数: {total_panels}")
+    print(f"平均幅: {avg_width:.1f}px")
+    print(f"平均高さ: {avg_height:.1f}px")
+    print(f"幅範囲: {min_width}-{max_width}px")
+    print(f"高さ範囲: {min_height}-{max_height}px")
+    
+    # 解像度別の集計
+    resolution_counter = Counter(resolutions)
+    print(f"\n最も多い解像度 (上位10個):")
+    for (w, h), count in resolution_counter.most_common(10):
+        print(f"{w}x{h}: {count}パネル")
+
 def main():
     curated_dataset_path = "curated_dataset"
     
@@ -474,6 +576,10 @@ def main():
         "T4-R1", "T4-R2", "T4-R3", "T4-R4"
     ]
     create_sample_visualization(all_valid_panels, category_list, curated_dataset_path)
+
+    # 解像度分布を分析
+    resolutions = analyze_resolution_distribution(all_valid_panels, curated_dataset_path)
+    create_resolution_scatter_plot(resolutions)
 
 if __name__ == "__main__":
     main()
