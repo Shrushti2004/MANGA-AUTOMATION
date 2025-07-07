@@ -5,12 +5,12 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Any
 
 
-def analyze_annotation_file(annotation_path: str) -> Dict[str, Tuple[int, int, int, int]]:
+def analyze_annotation_file(annotation_path: str) -> Dict[str, Tuple[int, int, int, int, int, int]]:
     """
-    アノテーションファイルを分析して、各画像のカテゴリ数を計算する
+    アノテーションファイルを分析して、各画像のカテゴリ数とサイズを計算する
     
     Returns:
-        Dict[image_id, (related_text_count, nonrelated_text_count, face_count, body_count)]
+        Dict[image_id, (related_text_count, nonrelated_text_count, face_count, body_count, width, height)]
     """
     with open(annotation_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -37,7 +37,11 @@ def analyze_annotation_file(annotation_path: str) -> Dict[str, Tuple[int, int, i
         face_count = len(item['face_objects'])
         body_count = len(item['body_objects'])
         
-        image_stats[image_id] = (related_text_count, nonrelated_text_count, face_count, body_count)
+        # 画像サイズを取得
+        width = item.get('frame_width', 1000)  # デフォルト値1000
+        height = item.get('frame_height', 1000)  # デフォルト値1000
+        
+        image_stats[image_id] = (related_text_count, nonrelated_text_count, face_count, body_count, width, height)
     
     return image_stats
 
@@ -46,8 +50,8 @@ def create_category_annotation(dataset_path: str, output_path: str) -> None:
     """
     curated_datasetを分析して、新しいアノテーションファイルを作成する
     """
-    # カテゴリ数ベクトルをキーとする辞書
-    category_groups: Dict[Tuple[int, int, int, int], List[str]] = defaultdict(list)
+    # カテゴリ数ベクトルをキーとする辞書（画像情報のリストを保存）
+    category_groups: Dict[Tuple[int, int, int, int], List[Dict[str, Any]]] = defaultdict(list)
     
     # 各マンガディレクトリを処理
     for manga_dir in os.listdir(dataset_path):
@@ -67,7 +71,7 @@ def create_category_annotation(dataset_path: str, output_path: str) -> None:
             image_stats = analyze_annotation_file(annotation_file)
             
             # 各画像について、カテゴリ数ベクトルを計算してグループ化
-            for image_id, (related_text_count, nonrelated_text_count, face_count, body_count) in image_stats.items():
+            for image_id, (related_text_count, nonrelated_text_count, face_count, body_count, width, height) in image_stats.items():
                 # 画像ファイルパスを構築
                 image_filename = f"{image_id}.png"
                 image_path = os.path.join(manga_path, image_filename)
@@ -77,7 +81,14 @@ def create_category_annotation(dataset_path: str, output_path: str) -> None:
                     # curated_datasetから見た相対パスを作成
                     relative_image_path = os.path.join(manga_dir, image_filename)
                     category_vector = (related_text_count, nonrelated_text_count, face_count, body_count)
-                    category_groups[category_vector].append(relative_image_path)
+                    
+                    # 画像情報（パス、サイズ）を保存
+                    image_info = {
+                        "path": relative_image_path,
+                        "width": width,
+                        "height": height
+                    }
+                    category_groups[category_vector].append(image_info)
                 else:
                     print(f"警告: 画像ファイルが見つかりません: {image_path}")
                     
@@ -87,7 +98,7 @@ def create_category_annotation(dataset_path: str, output_path: str) -> None:
     
     # 結果を辞書形式で整理
     result = {}
-    for category_vector, image_paths in category_groups.items():
+    for category_vector, image_infos in category_groups.items():
         related_text_count, nonrelated_text_count, face_count, body_count = category_vector
         key = f"related_text:{related_text_count}_nonrelated_text:{nonrelated_text_count}_face:{face_count}_body:{body_count}"
         result[key] = {
@@ -97,8 +108,9 @@ def create_category_annotation(dataset_path: str, output_path: str) -> None:
                 "face_objects": face_count,
                 "body_objects": body_count
             },
-            "image_paths": image_paths,
-            "count": len(image_paths)
+            "images": image_infos,  # パスとサイズ情報を含む
+            "image_paths": [img["path"] for img in image_infos],  # 後方互換性のため
+            "count": len(image_infos)
         }
     
     # 結果をJSONファイルに保存
@@ -112,6 +124,19 @@ def create_category_annotation(dataset_path: str, output_path: str) -> None:
     print(f"ユニークなカテゴリ数ベクトル: {len(result)}")
     total_images = sum(data['count'] for data in result.values())
     print(f"総画像数: {total_images}")
+    
+    # 画像サイズの統計
+    all_widths = []
+    all_heights = []
+    for data in result.values():
+        for img_info in data['images']:
+            all_widths.append(img_info['width'])
+            all_heights.append(img_info['height'])
+    
+    if all_widths and all_heights:
+        print(f"\n画像サイズ統計:")
+        print(f"  幅: 最小={min(all_widths)}, 最大={max(all_widths)}, 平均={sum(all_widths)/len(all_widths):.1f}")
+        print(f"  高さ: 最小={min(all_heights)}, 最大={max(all_heights)}, 平均={sum(all_heights)/len(all_heights):.1f}")
     
     # 上位5つのカテゴリを表示
     sorted_categories = sorted(result.items(), key=lambda x: x[1]['count'], reverse=True)

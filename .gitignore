@@ -6,3 +6,4 @@ visualized/
 build/
 curated_dataset/
 *.png
+__pycache__/
