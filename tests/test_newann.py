@@ -88,10 +88,12 @@ def create_2d_histograms(category_data_list):
         # 2次元ヒストグラムを作成
         hist, x_edges, y_edges = np.histogram2d(x_values, y_values, bins=[x_bins, y_bins], weights=weights)
         
-        # ヒートマップを描画（正方形）
+        # ヒートマップを描画（マス目形式）
         ax = axes[i]
-        im = ax.imshow(hist.T, origin='lower', cmap='viridis', aspect='equal',
-                      extent=(0, x_max, 0, y_max))
+        
+        # pcolormeshを使って個別のマス目を作成
+        X, Y = np.meshgrid(np.arange(x_max + 1), np.arange(y_max + 1))
+        im = ax.pcolormesh(X, Y, hist.T, cmap='viridis', shading='flat')
         
         # カラーバーを追加
         plt.colorbar(im, ax=ax, label='画像数')
@@ -101,12 +103,14 @@ def create_2d_histograms(category_data_list):
         ax.set_ylabel(y_label)
         ax.set_title(f'{x_label} vs {y_label}')
         
-        # 軸の範囲を設定
+        # 軸の範囲と目盛りを設定
         ax.set_xlim(0, x_max)
         ax.set_ylim(0, y_max)
+        ax.set_xticks(np.arange(0, x_max + 1, 2))
+        ax.set_yticks(np.arange(0, y_max + 1, 2))
         
-        # グリッドを追加
-        ax.grid(True, alpha=0.3)
+        # アスペクト比を正方形に設定
+        ax.set_aspect('equal')
         
         # 値を表示（画像数が多い場合は省略）
         if len(category_data_list) < 50:
@@ -151,9 +155,10 @@ def create_individual_2d_histogram(category_data_list, x_key, y_key, x_label, y_
     # 大きなサイズでプロット（正方形）
     fig, ax = plt.subplots(figsize=(10, 10))
     
-    # ヒートマップを描画（正方形）
-    im = ax.imshow(hist.T, origin='lower', cmap='viridis', aspect='equal',
-                  extent=(0, x_max, 0, y_max))
+    # ヒートマップを描画（マス目形式）
+    # pcolormeshを使って個別のマス目を作成
+    X, Y = np.meshgrid(np.arange(x_max + 1), np.arange(y_max + 1))
+    im = ax.pcolormesh(X, Y, hist.T, cmap='viridis', shading='flat')
     
     # カラーバーを追加
     plt.colorbar(im, ax=ax, label='画像数')
@@ -163,12 +168,14 @@ def create_individual_2d_histogram(category_data_list, x_key, y_key, x_label, y_
     ax.set_ylabel(y_label, fontsize=12)
     ax.set_title(f'{x_label} vs {y_label}の分布', fontsize=14)
     
-    # 軸の範囲を設定
+    # 軸の範囲と目盛りを設定
     ax.set_xlim(0, x_max)
     ax.set_ylim(0, y_max)
+    ax.set_xticks(np.arange(0, x_max + 1, 2))
+    ax.set_yticks(np.arange(0, y_max + 1, 2))
     
-    # グリッドを追加
-    ax.grid(True, alpha=0.3)
+    # アスペクト比を正方形に設定
+    ax.set_aspect('equal')
     
     # 値を表示
     for i in range(x_max):
