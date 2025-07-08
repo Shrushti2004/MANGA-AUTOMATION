@@ -19,6 +19,9 @@ def _calc_weight_matrix(layout1, layout2, iou_weight: float):
     
     n = len(boxes1)
     m = len(boxes2)
+    if n == 0 or m == 0:
+        return None
+    
     weight_matrix = box_iou(boxes1, boxes2).numpy()
     for i in range(n):
         for j in range(m):
@@ -45,18 +48,22 @@ def calc_similarity(
     if layout1.width != layout2.width or layout1.height != layout2.height:
         raise ValueError("Layouts must have the same width and height")
     
-    weight_matrix = _calc_weight_matrix(layout1, layout2, iou_weight)
-    
-    if weight_matrix.size == 0:
-        return 0.0
-
-    cost_matrix = -weight_matrix
-    
-    row_indices, col_indices = linear_sum_assignment(cost_matrix)
-    
     layout_score = 0.0
-    for i, j in zip(row_indices, col_indices):
-        layout_score += weight_matrix[i, j]
+    text_len1 = layout1.unrelated_text_length
+    text_len2 = layout2.unrelated_text_length
+    sigma = 10 ** 2
+    layout_score += math.exp(-(text_len1 - text_len2)**2 / (2 * sigma))
+
+    weight_matrix = _calc_weight_matrix(layout1, layout2, iou_weight)
+
+    if weight_matrix is not None:
+
+        cost_matrix = -weight_matrix
+        
+        row_indices, col_indices = linear_sum_assignment(cost_matrix)
+        
+        for i, j in zip(row_indices, col_indices):
+            layout_score += weight_matrix[i, j]
 
     return layout_score
 
@@ -67,23 +74,21 @@ if __name__ == "__main__":
         image_path="",
         width=100,
         height=100,
-        elements=[Speaker(bbox=[10, 60, 40, 100], text_length=20), 
-            Speaker(bbox=[70, 60, 90, 100], text_length=20)],
-        unrelated_text_length=0
+        elements=[],
+        unrelated_text_length=100
     )
 
     layout1.adjust(512, 512)
 
     annfile = "./curated_dataset/database.json"
-    num_speakers = 2
+    num_speakers = 0
     num_non_speakers = 0
     base_text_length = 0
-    text_length_threshold = 0
+    text_length_threshold = 70
     base_width = 512
     base_height = 512
     aspect_ratio_threshold = 0.2
     layouts = from_condition(annfile, num_speakers, num_non_speakers, base_text_length, text_length_threshold, base_width, base_height, aspect_ratio_threshold, True)
-    print(layouts)
     
     # 全てのlayoutについてスコアを計算
     layout_scores = []
