@@ -38,13 +38,16 @@ def test_database_annotation():
         
         # カテゴリ情報を保存
         counts = category_data['category_counts']
+        stats = category_data.get('statistics', {})
+        
         category_data_list.append({
             'key': category_key,
             'image_count': image_count,
-            'related_text': counts['related_text_objects'],
-            'nonrelated_text': counts['nonrelated_text_objects'],
-            'face': counts['face_objects'],
-            'body': counts['body_objects']
+            'related_humans': counts['related_humans'],
+            'non_related_humans': counts['non_related_humans'],
+            'total_humans': counts['related_humans'] + counts['non_related_humans'],
+            'total_text_chars': stats.get('total_related_text_chars', 0),
+            'avg_text_chars': stats.get('avg_related_text_chars_per_image', 0)
         })
     
     print(f"\n総カテゴリ数: {len(category_data_list)}")
@@ -59,12 +62,12 @@ def create_2d_histograms(category_data_list):
     """
     # 要素の組み合わせを定義
     combinations = [
-        ('related_text', 'nonrelated_text', 'Related Text Objects', 'Non-related Text Objects'),
-        ('related_text', 'face', 'Related Text Objects', 'Face Objects'),
-        ('related_text', 'body', 'Related Text Objects', 'Body Objects'),
-        ('nonrelated_text', 'face', 'Non-related Text Objects', 'Face Objects'),
-        ('nonrelated_text', 'body', 'Non-related Text Objects', 'Body Objects'),
-        ('face', 'body', 'Face Objects', 'Body Objects')
+        ('related_humans', 'non_related_humans', 'Related Humans', 'Non-related Humans'),
+        ('related_humans', 'total_humans', 'Related Humans', 'Total Humans'),
+        ('non_related_humans', 'total_humans', 'Non-related Humans', 'Total Humans'),
+        ('related_humans', 'avg_text_chars', 'Related Humans', 'Avg Text Chars per Image'),
+        ('total_humans', 'avg_text_chars', 'Total Humans', 'Avg Text Chars per Image'),
+        ('non_related_humans', 'avg_text_chars', 'Non-related Humans', 'Avg Text Chars per Image')
     ]
     
     # 2x3のサブプロットを作成
@@ -77,23 +80,34 @@ def create_2d_histograms(category_data_list):
         y_values = [item[y_key] for item in category_data_list]
         weights = [item['image_count'] for item in category_data_list]
         
-        # 2次元ヒストグラム用のデータを準備（最大値を20に制限）
+        # 軸の最大値を設定（文字数の場合は動的に設定）
+        if 'text_chars' in y_key:
+            y_max = min(int(max(y_values)) + 1, 100)  # 最大100文字まで
+        else:
+            y_max = 20
         x_max = 20
-        y_max = 20
         
         # ヒストグラムのビンを作成
+        if 'text_chars' in y_key:
+            y_bins = np.linspace(0, y_max, 21)  # 文字数は連続値として扱う
+        else:
+            y_bins = np.arange(0, y_max + 1)
         x_bins = np.arange(0, x_max + 1)
-        y_bins = np.arange(0, y_max + 1)
         
         # 2次元ヒストグラムを作成
         hist, x_edges, y_edges = np.histogram2d(x_values, y_values, bins=[x_bins, y_bins], weights=weights)
         
-        # ヒートマップを描画（マス目形式）
+        # ヒートマップを描画
         ax = axes[i]
         
-        # pcolormeshを使って個別のマス目を作成
-        X, Y = np.meshgrid(np.arange(x_max + 1), np.arange(y_max + 1))
-        im = ax.pcolormesh(X, Y, hist.T, cmap='viridis', shading='flat')
+        if 'text_chars' in y_key:
+            # 文字数の場合はimshowを使用
+            im = ax.imshow(hist.T, cmap='viridis', origin='lower', aspect='auto',
+                          extent=(0, x_max, 0, y_max))
+        else:
+            # 整数の場合はpcolormeshを使用
+            X, Y = np.meshgrid(np.arange(x_max + 1), np.arange(y_max + 1))
+            im = ax.pcolormesh(X, Y, hist.T, cmap='viridis', shading='flat')
         
         # カラーバーを追加
         plt.colorbar(im, ax=ax, label='画像数')
@@ -107,13 +121,20 @@ def create_2d_histograms(category_data_list):
         ax.set_xlim(0, x_max)
         ax.set_ylim(0, y_max)
         ax.set_xticks(np.arange(0, x_max + 1, 2))
-        ax.set_yticks(np.arange(0, y_max + 1, 2))
         
-        # アスペクト比を正方形に設定
-        ax.set_aspect('equal')
+        if 'text_chars' in y_key:
+            ax.set_yticks(np.arange(0, y_max + 1, 10))
+        else:
+            ax.set_yticks(np.arange(0, y_max + 1, 2))
+        
+        # アスペクト比を設定
+        if 'text_chars' in y_key:
+            ax.set_aspect('auto')
+        else:
+            ax.set_aspect('equal')
         
         # 値を表示（画像数が多い場合は省略）
-        if len(category_data_list) < 50:
+        if len(category_data_list) < 50 and 'text_chars' not in y_key:
             for j in range(x_max):
                 for k in range(y_max):
                     value = hist[j, k]
@@ -141,24 +162,33 @@ def create_individual_2d_histogram(category_data_list, x_key, y_key, x_label, y_
     y_values = [item[y_key] for item in category_data_list]
     weights = [item['image_count'] for item in category_data_list]
     
-    # 2次元ヒストグラム用のデータを準備（最大値を20に制限）
+    # 軸の最大値を設定
+    if 'text_chars' in y_key:
+        y_max = min(int(max(y_values)) + 1, 100)
+    else:
+        y_max = 20
     x_max = 20
-    y_max = 20
     
     # ヒストグラムのビンを作成
+    if 'text_chars' in y_key:
+        y_bins = np.linspace(0, y_max, 21)
+    else:
+        y_bins = np.arange(0, y_max + 1)
     x_bins = np.arange(0, x_max + 1)
-    y_bins = np.arange(0, y_max + 1)
     
     # 2次元ヒストグラムを作成
     hist, x_edges, y_edges = np.histogram2d(x_values, y_values, bins=[x_bins, y_bins], weights=weights)
     
-    # 大きなサイズでプロット（正方形）
+    # 大きなサイズでプロット
     fig, ax = plt.subplots(figsize=(10, 10))
     
-    # ヒートマップを描画（マス目形式）
-    # pcolormeshを使って個別のマス目を作成
-    X, Y = np.meshgrid(np.arange(x_max + 1), np.arange(y_max + 1))
-    im = ax.pcolormesh(X, Y, hist.T, cmap='viridis', shading='flat')
+    # ヒートマップを描画
+    if 'text_chars' in y_key:
+        im = ax.imshow(hist.T, cmap='viridis', origin='lower', aspect='auto',
+                      extent=(0, x_max, 0, y_max))
+    else:
+        X, Y = np.meshgrid(np.arange(x_max + 1), np.arange(y_max + 1))
+        im = ax.pcolormesh(X, Y, hist.T, cmap='viridis', shading='flat')
     
     # カラーバーを追加
     plt.colorbar(im, ax=ax, label='画像数')
@@ -172,18 +202,22 @@ def create_individual_2d_histogram(category_data_list, x_key, y_key, x_label, y_
     ax.set_xlim(0, x_max)
     ax.set_ylim(0, y_max)
     ax.set_xticks(np.arange(0, x_max + 1, 2))
-    ax.set_yticks(np.arange(0, y_max + 1, 2))
     
-    # アスペクト比を正方形に設定
-    ax.set_aspect('equal')
+    if 'text_chars' in y_key:
+        ax.set_yticks(np.arange(0, y_max + 1, 10))
+        ax.set_aspect('auto')
+    else:
+        ax.set_yticks(np.arange(0, y_max + 1, 2))
+        ax.set_aspect('equal')
     
-    # 値を表示
-    for i in range(x_max):
-        for j in range(y_max):
-            value = hist[i, j]
-            if value > 0:
-                ax.text(i + 0.5, j + 0.5, f'{int(value)}',
-                       ha='center', va='center', color='white', fontsize=10)
+    # 値を表示（文字数以外の場合）
+    if 'text_chars' not in y_key:
+        for i in range(x_max):
+            for j in range(y_max):
+                value = hist[i, j]
+                if value > 0:
+                    ax.text(i + 0.5, j + 0.5, f'{int(value)}',
+                           ha='center', va='center', color='white', fontsize=10)
     
     plt.tight_layout()
     plt.show()
@@ -217,15 +251,37 @@ def test_category_statistics():
     for i, (category_key, category_data) in enumerate(sorted_categories[:10]):
         image_count = len(category_data['image_paths'])
         counts = category_data['category_counts']
+        stats = category_data.get('statistics', {})
         print(f"{i+1:2d}. {category_key}: {image_count}個")
-        print(f"    related_text:{counts['related_text_objects']}, "
-              f"nonrelated_text:{counts['nonrelated_text_objects']}, "
-              f"face:{counts['face_objects']}, body:{counts['body_objects']}")
+        print(f"    related_humans:{counts['related_humans']}, "
+              f"non_related_humans:{counts['non_related_humans']}")
+        print(f"    平均関連文字数: {stats.get('avg_related_text_chars_per_image', 0):.1f}")
     
     # 統計情報
     total_images = sum(len(category_data['image_paths']) for category_data in data.values())
+    total_text_chars = sum(category_data.get('statistics', {}).get('total_related_text_chars', 0) 
+                          for category_data in data.values())
+    
     print(f"\n総画像数: {total_images}")
     print(f"平均画像数/カテゴリ: {total_images / len(data):.2f}")
+    print(f"総関連文字数: {total_text_chars}")
+    print(f"平均関連文字数/画像: {total_text_chars / total_images:.2f}")
+    
+    # 関連人間数別の統計
+    related_humans_stats = {}
+    for category_data in data.values():
+        related_count = category_data['category_counts']['related_humans']
+        if related_count not in related_humans_stats:
+            related_humans_stats[related_count] = {'images': 0, 'categories': 0, 'text_chars': 0}
+        related_humans_stats[related_count]['images'] += len(category_data['image_paths'])
+        related_humans_stats[related_count]['categories'] += 1
+        related_humans_stats[related_count]['text_chars'] += category_data.get('statistics', {}).get('total_related_text_chars', 0)
+    
+    print(f"\n関連人間数別統計:")
+    for related_count in sorted(related_humans_stats.keys()):
+        stats = related_humans_stats[related_count]
+        avg_chars = stats['text_chars'] / stats['images'] if stats['images'] > 0 else 0
+        print(f"  {related_count}人: {stats['categories']}カテゴリ, {stats['images']}画像, 平均文字数: {avg_chars:.1f}")
 
 
 if __name__ == "__main__":
