@@ -12,6 +12,7 @@ def _analyze_metadata(manga_path: str, metadata: dict):
     body_objects = metadata['body_objects']
     relations = metadata['relations']
     speaker_and_text_length = {}
+    speaker_and_text_bbox = {}
     related_text = set()
     for relation in relations:
         related_body_id = relation['body_id']
@@ -23,21 +24,24 @@ def _analyze_metadata(manga_path: str, metadata: dict):
                 related_text_content = text_object['text']
                 break
         speaker_and_text_length[related_body_id] = speaker_and_text_length.get(related_body_id, 0) + len(related_text_content)
+        speaker_and_text_bbox[related_body_id] = speaker_and_text_bbox.get(related_body_id, []) + ([{"bbox": text_object['bbox'], "length": len(related_text_content)}])
 
     speaker_objects = []
     non_speaker_objects = []
+    unrelated_text_bbox = []
     unrelated_text_length = 0
     for body_object in body_objects:
         body_id = body_object['id']
         body_bbox = body_object['bbox']
         if body_id in speaker_and_text_length:
-            speaker_objects.append({"bbox" : body_bbox, "text_length" : speaker_and_text_length[body_id]})
+            speaker_objects.append({"bbox" : body_bbox, "text_length" : speaker_and_text_length[body_id], "text_info" : speaker_and_text_bbox[body_id]})
         else:
             non_speaker_objects.append({"bbox" : body_bbox})
 
     for text_object in text_objects:
         if text_object['id'] not in related_text:
             unrelated_text_length += len(text_object['text'])
+            unrelated_text_bbox.append({"bbox": text_object['bbox'], "length": len(text_object['text'])})
     
     return len(speaker_objects), len(non_speaker_objects), {
         "image_path": image_path,
@@ -45,7 +49,8 @@ def _analyze_metadata(manga_path: str, metadata: dict):
         "height": height,
         "speaker_objects": speaker_objects,
         "non_speaker_objects": non_speaker_objects,
-        "unrelated_text_length": unrelated_text_length
+        "unrelated_text_length": unrelated_text_length,
+        "unrelated_text_bbox": unrelated_text_bbox
     }
 
 

@@ -9,11 +9,14 @@ import math
 import random
 import matplotlib.pyplot as plt
 
-from lib.layout.layout import MangaLayout, from_condition, Speaker, NonSpeaker
+# 循環インポートを避けるため、インポートを削除
+# from lib.layout.layout import MangaLayout, from_condition, Speaker, NonSpeaker
 
 
 def _calc_weight_matrix(layout1, layout2, iou_weight: float):
-
+    # 関数内でインポート
+    from lib.layout.layout import Speaker
+    
     boxes1 = torch.tensor([elem.bbox for elem in layout1.elements], dtype=torch.float32)
     boxes2 = torch.tensor([elem.bbox for elem in layout2.elements], dtype=torch.float32)
     
@@ -35,7 +38,6 @@ def _calc_weight_matrix(layout1, layout2, iou_weight: float):
                 sigma = 10 ** 2
                 text_weight = math.exp(-(text_len1 - text_len2)**2 / (2 * sigma))
                 weight_matrix[i,j] = iou_weight * weight_matrix[i,j] + (1 - iou_weight) * text_weight
-                print(weight_matrix[i,j])
 
     return weight_matrix
 
@@ -54,10 +56,11 @@ def calc_similarity(
     sigma = 10 ** 2
     layout_score += math.exp(-(text_len1 - text_len2)**2 / (2 * sigma))
 
+    row_indices = []
+    col_indices = []
+
     weight_matrix = _calc_weight_matrix(layout1, layout2, iou_weight)
-
     if weight_matrix is not None:
-
         cost_matrix = -weight_matrix
         
         row_indices, col_indices = linear_sum_assignment(cost_matrix)
@@ -70,12 +73,16 @@ def calc_similarity(
 
 # test function for calc_similarity
 if __name__ == "__main__":
+    # テスト関数内でインポート
+    from lib.layout.layout import MangaLayout, from_condition
+    
     layout1 = MangaLayout(
         image_path="",
         width=100,
         height=100,
         elements=[],
-        unrelated_text_length=100
+        unrelated_text_length=100,
+        unrelated_text_bbox=[]
     )
 
     layout1.adjust(512, 512)

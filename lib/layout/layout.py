@@ -1,9 +1,12 @@
 import json
 import os
-from typing import List
+from typing import List, Dict
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
+
+from lib.layout.score import calc_similarity
 
 class Element:
     def __init__(self, bbox: List[int]):
@@ -13,9 +16,10 @@ class Element:
         return (self.bbox[2] - self.bbox[0]) * (self.bbox[3] - self.bbox[1])
 
 class Speaker(Element):
-    def __init__(self, bbox: List[int], text_length: int):
+    def __init__(self, bbox: List[int], text_length: int, text_info=None):
         super().__init__(bbox)
         self.text_length = text_length
+        self.text_info = text_info
     
     def __repr__(self):
         return f'Speaker(bbox: {self.bbox}, text_length: {self.text_length})'
@@ -28,13 +32,13 @@ class NonSpeaker(Element):
         return f'NonSpeaker(bbox: {self.bbox})'
 
 class MangaLayout:
-    def __init__(self, image_path: str, width: int, height: int, elements: List[Element], unrelated_text_length: int):
+    def __init__(self, image_path: str, width: int, height: int, elements: List[Element], unrelated_text_length: int, unrelated_text_bbox: List[Dict[str, int]]):
         self.image_path = image_path
         self.width = width
         self.height = height
         self.elements = elements
         self.unrelated_text_length = unrelated_text_length
-
+        self.unrelated_text_bbox = unrelated_text_bbox
 
     def adjust(self, base_width: int, base_height: int):
         original_width = self.width
@@ -68,6 +72,21 @@ class MangaLayout:
                 int(element.bbox[1] * total_height_scale),
                 int(element.bbox[2] * total_width_scale),
                 int(element.bbox[3] * total_height_scale)
+            ]
+            if type(element) == Speaker:
+                for text_info in element.text_info:
+                    text_info["bbox"] = [
+                        int(text_info["bbox"][0] * total_width_scale),
+                        int(text_info["bbox"][1] * total_height_scale),
+                        int(text_info["bbox"][2] * total_width_scale),
+                        int(text_info["bbox"][3] * total_height_scale)
+                    ]
+        for text_info in self.unrelated_text_bbox:
+            text_info["bbox"] = [
+                int(text_info["bbox"][0] * total_width_scale),
+                int(text_info["bbox"][1] * total_height_scale),
+                int(text_info["bbox"][2] * total_width_scale),
+                int(text_info["bbox"][3] * total_height_scale)
             ]
 
     def plot_data(self, ax):
@@ -106,13 +125,13 @@ def _generate_layout_from_metadata(metadata: dict):
     speaker_objects = metadata["speaker_objects"]
     non_speaker_objects = metadata["non_speaker_objects"]
     unrelated_text_length = metadata["unrelated_text_length"]
-    
+    unrelated_text_bbox = metadata["unrelated_text_bbox"]
     elements = []
     for speaker_object in speaker_objects:
-        elements.append(Speaker(speaker_object["bbox"], speaker_object["text_length"]))
+        elements.append(Speaker(speaker_object["bbox"], speaker_object["text_length"], speaker_object["text_info"]))
     for non_speaker_object in non_speaker_objects:
         elements.append(NonSpeaker(non_speaker_object["bbox"]))
-    mangalayout = MangaLayout(image_path, width, height, elements, unrelated_text_length)
+    mangalayout = MangaLayout(image_path, width, height, elements, unrelated_text_length, unrelated_text_bbox)
     return mangalayout
 
 def from_condition(annfile: str, num_speakers: int, num_non_speakers: int, base_text_length: int, text_length_threshold: int, base_width: int, base_height: int, aspect_ratio_threshold: float,  adjust: bool):
@@ -159,6 +178,47 @@ def from_condition(annfile: str, num_speakers: int, num_non_speakers: int, base_
 
     return layouts
 
+def generate_layout(bboxes: List[List[int]], panel, width, height):
+    manga_elements = []
+    unrelated_text_length = 0
+    bbox_pointer = 0
+    bbox_len = len(bboxes)
+    for element in panel:
+        if element["type"] == "dialogue":
+            speaker = Speaker(bboxes[bbox_pointer], len(element["content"]))
+            manga_elements.append(speaker)
+            bbox_point += 1
+        elif element["type"] == "monologue":
+            unrelated_text_length += len(element["content"])
+
+    while bbox_pointer < bbox_len:
+        manga_elements.append(NonSpeaker(bboxes[bbox_pointer]))
+        bbox_pointer += 1
+
+    manga_layout = MangaLayout("", width, height, manga_elements, unrelated_text_length, None)
+    return manga_layout
+
+def similar_layouts(layout: MangaLayout, text_length_threshold=20, aspect_ratio_threshold=0.4, annfile="./curated_dataset/database.json"):
+    num_speakers = 0
+    num_non_speakers = 0
+    unrelated_text_length = layout.unrelated_text_length
+    for element in layout.elements:
+        if type(element) == Speaker:
+            num_speakers += 1
+        elif type(element) == NonSpeaker:
+            num_non_speakers += 1
+    filtered_layouts = from_condition(annfile, num_speakers, num_non_speakers, unrelated_text_length, text_length_threshold, layout.width, layout.height, aspect_ratio_threshold, True)
+    # print(f"Filtered layouts: {len(filtered_layouts)}")
+    # print(f"Layouts: {filtered_layouts}")
+
+    layout_scores = []
+    for filtered_layout in filtered_layouts:
+        score, pairs = calc_similarity(layout, filtered_layout, 0.4)
+        layout_scores.append((filtered_layout, score, pairs))
+    
+    layout_scores.sort(key=lambda x: x[1], reverse=True)
+    return layout_scores
+
 
 # test function for from_num_speakers
 if __name__ == "__main__":
@@ -171,5 +231,4 @@ if __name__ == "__main__":
     base_width = 100
     base_height = 100
     layouts = from_condition(annfile, num_speakers, num_non_speakers, base_text_length, text_length_threshold, base_width, base_height, aspect_ratio_threshold, True)
-    print(layouts)
     print(f"Found {len(layouts)} layouts")

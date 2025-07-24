@@ -1,0 +1,1 @@
+python src/pipeline.py --script_path examples/DVwife1.txt --output_path output

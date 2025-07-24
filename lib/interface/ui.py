@@ -749,7 +749,8 @@ def create_manga_layout_object(bbox_data, canvas_width, canvas_height, unrelated
         width=canvas_width,
         height=canvas_height,
         elements=elements,
-        unrelated_text_length=unrelated_text_length
+        unrelated_text_length=unrelated_text_length,
+        unrelated_text_bbox=[]
     )
     
     return layout

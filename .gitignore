@@ -7,3 +7,5 @@ build/
 curated_dataset/
 *.png
 __pycache__/
+output/
+.env
