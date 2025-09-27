@@ -178,7 +178,17 @@ def from_condition(annfile: str, num_speakers: int, num_non_speakers: int, base_
 
     return layouts
 
+def is_valid_layout(bboxes: List[List[int]], panel):
+    speaker_count = 0
+    for element in panel:
+        if element["type"] == "dialogue":
+            speaker_count += 1
+    return speaker_count <= len(bboxes)
+
 def generate_layout(bboxes: List[List[int]], panel, width, height):
+    if not is_valid_layout(bboxes, panel):
+        print("invalid layout")
+        return None
     manga_elements = []
     unrelated_text_length = 0
     bbox_pointer = 0
@@ -187,7 +197,7 @@ def generate_layout(bboxes: List[List[int]], panel, width, height):
         if element["type"] == "dialogue":
             speaker = Speaker(bboxes[bbox_pointer], len(element["content"]))
             manga_elements.append(speaker)
-            bbox_point += 1
+            bbox_pointer += 1
         elif element["type"] == "monologue":
             unrelated_text_length += len(element["content"])
 
@@ -198,7 +208,7 @@ def generate_layout(bboxes: List[List[int]], panel, width, height):
     manga_layout = MangaLayout("", width, height, manga_elements, unrelated_text_length, None)
     return manga_layout
 
-def similar_layouts(layout: MangaLayout, text_length_threshold=20, aspect_ratio_threshold=0.4, annfile="./curated_dataset/database.json"):
+def similar_layouts(layout: MangaLayout, text_length_threshold=5, aspect_ratio_threshold=0.3, annfile="./curated_dataset/database.json"):
     num_speakers = 0
     num_non_speakers = 0
     unrelated_text_length = layout.unrelated_text_length
@@ -208,8 +218,6 @@ def similar_layouts(layout: MangaLayout, text_length_threshold=20, aspect_ratio_
         elif type(element) == NonSpeaker:
             num_non_speakers += 1
     filtered_layouts = from_condition(annfile, num_speakers, num_non_speakers, unrelated_text_length, text_length_threshold, layout.width, layout.height, aspect_ratio_threshold, True)
-    # print(f"Filtered layouts: {len(filtered_layouts)}")
-    # print(f"Layouts: {filtered_layouts}")
 
     layout_scores = []
     for filtered_layout in filtered_layouts:

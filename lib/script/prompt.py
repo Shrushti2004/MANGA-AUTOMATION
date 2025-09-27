@@ -209,34 +209,41 @@ output_example = """
 
 panel_prompt = """
 you are a professional manga script writer.
-your job is to divide the given list of elements into panels.
+your job is to divide the given list of elements into panels which contain several elements.
 
 <Task>
 Your focus is to divide the given list of elements into panels.
 </Task>
 
-<Definition>
-element:
-- an element is a dict object with the following keys:
-    - content: a string of the content of the element.
-    - type: a string of the type of the element. description, dialogue, or monologue.
-    - speaker: a string of the speaker of the element. If the element is a description, the speaker is an empty string.
-panel:
-- a panel is a chunk of elements.
-- a panel contains at least one element.
-- a panel MUST NOT contain two or more elements whose type is description.
-- a panel may contain multiple elements whose type is dialogue or monologue.
-</Definition>
 
 <Guidelines>
-Please follow these guidelines to divide the given list of elements into panels:
 
-1. Each panel MUST NOT contain more than three elements regardless of the type of the elements.
-2. Each panel MUST NOT contain two or more elements whose type is description.
-3. Each panel MUST contain the elements which is inferred to be spoken or occured in the same scene, time, place , or situation.
-4. If there are more than three elements in a panel, divide the panel into smaller panels to satisfy the above rules.
-5. DO NOT miss any element. DO NOT make up any element.
-6. The output should be a valid JSON array and DO NOT answer it in markdown format. Answer it in the row text.
+
+- **Composite Panel from Elements**
+   Composite the elements into a panel. Each panel is expressed as a list of elements.
+
+
+- **One Action per Panel**  
+  Each panel should contain **no more than one action**.  
+  **Example:**  
+  “Cooking” + “Setting the table” = 2 actions → Should be split into two panels.
+
+- **Cut Panels on Scene Changes**  
+  Always divide panels when there is a **scene transition**.  
+  **Examples:**  
+  Morning → Night  
+  Bedroom → Living room
+
+- **Max 1 Exchange per Panel**  
+  Limit to **1 back-and-forth** (2 lines of dialogue) per panel.
+
+- **Avoid Multiple Lines by Same Character**  
+  The same character should not speak more than once per panel.  
+  *Exception: internal monologues are allowed.*
+
+- **ROW JSON OUTPUT**
+The output should be a valid JSON array and DO NOT answer it in markdown format. Answer it in the row text.
+
 </Guidelines>
 
 <Output Format>
@@ -245,20 +252,30 @@ Here is the format of the output:
 ```
 [
     [
-        {element1},
-        {element2}
+        {   
+            "content" : "The content of the element.",
+            "type" : "description" or "dialogue" or "monologue"
+            "speaker" : "The speaker's name. If the element is a monologue, the speaker's name MUST BE extracted. If the element is a dialogue, the speaker's name MUST BE extracted. If the element is a description, the speaker's name MUST BE empty."
+        },
+        {   
+            "content" : "The content of the element.",
+            "type" : "description" or "dialogue" or "monologue"
+            "speaker" : "The speaker's name. If the element is a monologue, the speaker's name MUST BE extracted. If the element is a dialogue, the speaker's name MUST BE extracted. If the element is a description, the speaker's name MUST BE empty."
+        },
     ],
     [
-        {element3},
+        {   
+            "content" : "The content of the element.",
+            "type" : "description" or "dialogue" or "monologue"
+            "speaker" : "The speaker's name. If the element is a monologue, the speaker's name MUST BE extracted. If the element is a dialogue, the speaker's name MUST BE extracted. If the element is a description, the speaker's name MUST BE empty."
+        },
+        ...
     ],
-    [
-        {element4},
-        {element5},
-        {element6},
-    ]
+    ...
 ]
 ```
 </Output Format>
+
 """
 
 panel_example_input = """
@@ -478,30 +495,23 @@ your job is to modify or add description of the panel.
 Your focus is to modify or add description of the panel.
 </Task>
 
-<Definition>
-element:
-- an element is a dict object with the following keys:
-    - content: a string of the content of the element.
-    - type: a string of the type of the element. description, dialogue, or monologue.
-    - speaker: a string of the speaker of the element. If the element is a description, the speaker is an empty string.
-panel:
-- a panel is a chunk of elements.
-- a panel contains at least one element.
-- a panel MUST NOT contain two or more elements whose type is description.
-- a panel may contain multiple elements whose type is dialogue or monologue.
-</Definition>
 
 <Guidelines>
 Please follow these guidelines to modify or add description of the panel:
 
-1. If the panel already contains an element whose type is description, modify the description of the element. If the subject is missing, add subject to the corresponding verb based on the context. Modification should be as minimal as possible.
-2. If the panel does not contain an element whose type is description, add a description to the panel. Generate a single sentence description based on the context. Set the type to description and the speaker to an empty string.
-3. There MUST BE one description in each panel.
-4. Generated description should be the first element of the panel. (Insert it at the beginning of the panel)
-5. It is totally OK if the number of elements in the panel is more than three by this modification.
-6. DO NOT change any elements whose type is dialogue or monologue.
-7. DO NOT change the order of the elements in the panel.
-8. The output should be a valid JSON array and DO NOT answer it in markdown format. Answer it in the row text.
+**GENERATION OF DESCRIPTION**
+- If the panel does not contain an element whose type is description, infer and generate a description element and add it to the panel.
+- If the panel already contains an element whose type is description, check whether the subject is missing and if so, add the subject to the corresponding verb based on the context.
+
+**NO CHANGE OF DIALOGUE AND MONOLOGUE**
+- DO NOT change any elements whose type is dialogue or monologue.
+- DO NOT change the order of the elements in the panel.
+
+**RAW JSON OUTPUT**
+- The output MUST BE a valid JSON array
+- DO NOT answer in markdown format
+- MUST answer in the row text.
+
 </Guidelines>
 
 <Output Format>

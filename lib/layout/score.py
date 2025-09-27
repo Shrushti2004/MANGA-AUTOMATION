@@ -68,7 +68,7 @@ def calc_similarity(
         for i, j in zip(row_indices, col_indices):
             layout_score += weight_matrix[i, j]
 
-    return layout_score
+    return layout_score, zip(row_indices, col_indices)
 
 
 # test function for calc_similarity

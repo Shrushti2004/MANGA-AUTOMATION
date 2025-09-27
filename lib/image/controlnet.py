@@ -1,5 +1,6 @@
 from typing import List, Optional, Tuple
 import io
+from tqdm import tqdm
 import os
 import base64
 import json
@@ -21,11 +22,12 @@ class People:
 
 
 class ControlNetResult:
-    def __init__(self, json_response):
+    def __init__(self, json_response, base_image_path=""):
         self.canvas_height:int = None
         self.canvas_width:int = None
         self.image: Image = None
         self.people: List[People] = []
+        self.base_image_path = base_image_path
         self._parse_response(json_response)
 
     def _parse_response(self, json_response):
@@ -70,16 +72,12 @@ def controlnet2bboxes(controlnet_results: ControlNetResult):
 
 
 def detect_human(image_dir):
-    if image_dir is None:
-        raise ValueError("image_dir is not set")
-
     dict = {}
-
-    for panel_dir in os.listdir(image_dir):
-        panel_dir = os.path.join(image_dir, panel_dir)
+    for panel_name in tqdm(os.listdir(image_dir), desc="Processing Panels for detect human"):
+        panel_dir = os.path.join(image_dir, panel_name)
         results = []
-        for filepath in os.listdir(panel_dir):
-            filepath = os.path.join(panel_dir, filepath)
+        for filename in os.listdir(panel_dir):
+            filepath = os.path.join(panel_dir, filename)
             with open(filepath, "rb") as f:
                 img_data = base64.b64encode(f.read()).decode("utf-8")
 
@@ -92,10 +90,56 @@ def detect_human(image_dir):
             with open("response.txt", "w") as f:
                 json.dump(response, f, indent=2)
 
-            contrlnet_res = ControlNetResult(response)
+            contrlnet_res = ControlNetResult(response, filepath)
             results.append(contrlnet_res)
-        dict[panel_dir] = results
+        dict[panel_name] = results
     return dict
+
+def run_controlnet_openpose(image_path, controlnetres_image_path=None,output_path=None):
+    with open(image_path, "rb") as f:
+        img_data = base64.b64encode(f.read()).decode("utf-8")
+
+    payload = {
+        "controlnet_module": "openpose_full",
+        "controlnet_input_images": [img_data],
+    }
+
+    response = requests.post("http://127.0.0.1:7860/controlnet/detect", json=payload).json()
+    if output_path is not None:
+        with open(os.path.join(output_path, "response.json"), "w") as f:
+            json.dump(response, f, indent=2)
+
+    return ControlNetResult(response, controlnetres_image_path)
+
+
+def generate_with_controlnet_openpose(pose_image_path, prompt, save_path, model="T-anime-v4"):
+    with open(pose_image_path, "rb") as f:
+        img_data = base64.b64encode(f.read()).decode("utf-8")
+    payload = {
+        "prompt": prompt,
+        "override_settings" : {
+            "sd_model_checkpoint" : model,
+        },
+        "width": 512,
+        "height": 512,
+        "alwayson_scripts": {
+            "controlnet": {
+                "args": [{
+                    "image": img_data,
+                    "module": "openpose",
+                    "model": "control_v11p_sd15_openpose",
+                    "enabled": True,
+                    "control_mode": "ControlNet is more important",
+                }]
+            }
+        }
+    }
+    response = requests.post("http://127.0.0.1:7860/sdapi/v1/txt2img", json=payload).json()
+    image_base64 = response["images"][0]
+    image_bytes = io.BytesIO(base64.b64decode(image_base64))
+    image = Image.open(image_bytes)
+    image.save(save_path)
+    return
 
 
 def check_open():

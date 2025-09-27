@@ -1,0 +1,302 @@
+[
+    {
+        "content": "『クマのプーさん』のように丸々と太った男・創太（３６）が、デスクに向かって絵本の絵を描いている。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "僕の名は熊田創太（くまだ・そうた）。絵本作家です",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "本棚に飾ってある大賞のトロフィー。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "学生時代に賞をいただき、以来、この道ひとすじです",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "創太、エプロン姿で、玄米ご飯に味噌汁の和食をせっせと作っている。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "１０日前に結婚し、新婚生活をスタートさせました",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "リビングのテーブルに、きれいに並べられた２人分の朝食。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "朝の日課は、まず朝食を作ること",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "時計を見ると、７時３０分。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "そして――",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "ダブルベッドに寝ている髪ボサボサの女性。創太がベッドの脇に立っている。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "カエデさんを起こすこと",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "（大声）カエデさん、朝食できたよー！",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "カエデ（３６）が寝ぼけ眼で創太を睨む。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "（気だるそうに）うー……。そんな大声出されると頭痛がひどくなるからやめて……",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "あっ、ごめん",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "カエデさんは頭痛持ち。寝起きは特にひどく、機嫌が悪い",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "蒼太君、能天気すぎない？",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "えっ？",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "（表情が一変）私、明け方まで眠れなかったんだけど！　創太君、自分だけぐぅぐぅ寝てたでしょ！",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "そ、そっか。ごめんね（汗）",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "んっ！",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "と不機嫌そうに睨んで両手を差し出す。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "あっ、はい……（汗）",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "創太、カエデをハグして立ち上がらせる。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "カエデはガリガリに痩せていてモデル体型（身長は高くない。創太より低い）。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "そのままハグしてもらっているカエデ。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "カエデさんをハグで起こして、不機嫌を治す。これも日課の１つ",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "朝食を食べている創太とカエデ。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "朝食のメニューはカエデさんの好みで毎日決まっている。柔らかめに炊いた玄米ご飯、豆腐とワカメの味噌汁（味噌はこうじ味噌）、しっかり火の通った焼き鮭、万能ネギたっぷりの納豆（からし抜き）……",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "（ピクッと手が止まる）……",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "カエデ、ヨーグルトとバナナのデザートを見て、手が止まっている。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "創太君、これ何？",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "え？　バナナだけど……",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "（カチンと）デザートはリンゴとヨーグルトがいいって、私、言ったよね！？",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "ごめん……。でも、バナナはマグネシウムたっぷりで偏頭痛にも効果があるって、ネットに書いてあったから……",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "またネットの情報を鵜呑みにしてるの！？　創太君、バカなんじゃないの！？",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "ガミガミと怒り続けるカエデ。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "俯き気味で黙って聞いている創太。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "カエデさんの口癖、「ただで読めるインターネットに正しい情報なんか書いてあるわけがない。信じる人はバカだ」",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "だいたい朝からバナナなんて食べたら体が冷えるし、腸に負担がかかるでしょ！",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "それもネットの情報では？",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "今度から気をつけるね（と微苦笑）",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "（ため息）ハァ?。創太君って絵本は描けるけど、ホント何も知らないよね。脳みそ空っぽのクマのプーさんって感じ",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "創太、微笑しながらも、額から冷や汗。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "カエデさんの頭痛をなんとかしたかったけど、逆効果でした",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "その夜……",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "創太、パジャマ姿で歯を磨いている。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "風呂上がりのカエデ、バスローブ姿でリビングに入ってくる。深刻な表情。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "ねえ、創太君、話があるんだけど",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "ん？",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "私、明日、家を出て行きます",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "……！？",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "それが地獄の日々の幕開けでした",
+        "type": "monologue",
+        "speaker": "創太"
+    },
+    {
+        "content": "混乱している創太。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "えっ!?　家を出て行く!?",
+        "type": "dialogue",
+        "speaker": "創太"
+    },
+    {
+        "content": "明日から友達の家に泊まるから",
+        "type": "dialogue",
+        "speaker": "カエデ"
+    },
+    {
+        "content": "さっさとカエデ、寝室へ行ってしまう。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "パニックの創太。",
+        "type": "description",
+        "speaker": ""
+    },
+    {
+        "content": "それって、別居ってこと!?　まだ新婚１０日目なのに！",
+        "type": "monologue",
+        "speaker": "創太"
+    }
+]

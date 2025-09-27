@@ -5,6 +5,8 @@ from openai import OpenAI
 from lib.script.prompt import division_prompt, input_example, output_example, panel_example_input, panel_example_output, panel_prompt, richfy_prompt
 
 def _extract_inside_parenthesis(str):
+    if str == "":
+        return None
     if str.startswith("「") and str.endswith("」"):
         return str[1:-1]
     elif str.startswith("『") and str.endswith("』"):
@@ -22,7 +24,8 @@ def refine_elements(elements, output_path):
     
     for element in elements:
         if element["type"] == "monologue" or element["type"] == "dialogue":
-            element["content"] = _extract_inside_parenthesis(element["content"])
+            extracted_content = _extract_inside_parenthesis(element["content"])
+            element["content"] = extracted_content if extracted_content is not None else element["content"]
 
     with open(os.path.join(output_path, "elements_refined.json"), "w", encoding="utf-8") as f:
         json.dump(elements, f, ensure_ascii=False, indent=4)
@@ -85,8 +88,8 @@ def ele2panels(client, elements, output_path, max_retry=3):
     
     messages = [
         {"role": "system", "content": panel_prompt},
-        {"role": "user", "content": panel_example_input},
-        {"role": "assistant", "content": panel_example_output},
+        # {"role": "user", "content": panel_example_input},
+        # {"role": "assistant", "content": panel_example_output},
         {"role": "user", "content": json.dumps(elements)},
     ]
 
@@ -126,7 +129,7 @@ def divide_script(client,script_path, output_path, max_retry=3):
 
     base_name = os.path.basename(script_path)
 
-    divided_script_path = os.path.join(output_path, base_name)
+    divided_script_path = os.path.join(output_path, base_name.split(".")[0] + "_divided.json")
     if os.path.exists(divided_script_path):
         with open(divided_script_path, "r", encoding="utf-8") as f:
             return json.load(f)

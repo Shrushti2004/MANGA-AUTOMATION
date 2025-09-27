@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
-from lib.layout.layout import MangaLayout, Speaker
+from lib.layout.layout import MangaLayout, Speaker, NonSpeaker
 from math import atan2, cos, sin, hypot
 import random
 from math import ceil
@@ -8,169 +8,128 @@ from math import ceil
 FONTPATH = "fonts/NotoSansCJK-Regular.ttc"
 
 
-def controlnetres2pil(res):
-    canvas = (res.canvas_width, res.canvas_height)
-    w, h = canvas
-    img = Image.new("RGB", (w, h), (255, 255, 255))
+def draw_vertical_text(img, text, bbox, type):
     draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(FONTPATH, 20)
+    vertical_margin = 2
+    horiziontal_margin = 2
+    image_width, image_height = img.width, img.height
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    char_bbox = font.getbbox("あ")
+    char_width = char_bbox[2] - char_bbox[0]
+    char_height = char_bbox[3] - char_bbox[1]
+    chars_per_col = int(height / (char_height + vertical_margin))
 
-    default_palette = [
-        ( 31, 119, 180),  # blue
-        (255, 127,  14),  # orange
-        ( 44, 160,  44),  # green
-        (214,  39,  40),  # red
-        (148, 103, 189),  # purple
-        (140,  86,  75),  # brown
-        (227, 119, 194),  # pink
-        (127, 127, 127),  # gray
-        (188, 189,  34),  # olive
-        ( 23, 190, 207),  # cyan
-    ]
+    estimated_width = char_width * (int((len(text) / chars_per_col)) + 1)
+    final_bbox = [bbox[2] - estimated_width, bbox[1], bbox[2], bbox[3]]
 
-    def get_color(idx):
-        if idx < len(default_palette):
-            return default_palette[idx]
-        random.seed(idx)
-        return tuple(random.randint(0, 255) for _ in range(3))
-
-    attr_names = [
-        "pose_keypoints_2d",
-        "face_keypoints_2d",
-        "hand_left_keypoints_2d",
-        "hand_right_keypoints_2d",
-    ]
-
-    radius = 4
-    for person_idx, person in enumerate(res.people):
-        col = get_color(person_idx)
-        for attr in attr_names:
-            pts = getattr(person, attr, None)
-            if not pts:
-                continue
-            for x, y in pts:
-                if x == 0 and y == 0:
-                    continue
-                x, y = x * w, y * h  # 正規化→画面座標
-                bbox = [x - radius, y - radius, x + radius, y + radius]
-                draw.ellipse(bbox, fill=col)
-
-    return img
-
-def draw_bubble(img, bbox, type, point):
-    base_width = 40
-    x1, y1, x2, y2 = bbox
-    w, h = x2 - x1, y2 - y1
-    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-    k = 2 ** 0.5
-    a, b = (w / 2) * k, (h / 2) * k
-    ellipse_box = (cx - a, cy - b, cx + a, cy + b)
-    draw = ImageDraw.Draw(img)
-    draw.ellipse(ellipse_box, fill="white", outline="black", width=2)
-    tx, ty = point
-    theta = atan2((ty - cy) / b, (tx - cx) / a)
-    bx, by = cx + a * cos(theta), cy + b * sin(theta)
-    tx_tan, ty_tan = -a * sin(theta), b * cos(theta)
-    t_len = hypot(tx_tan, ty_tan)
-    tx_tan, ty_tan = tx_tan / t_len, ty_tan / t_len
-    half = base_width / 2
-    lx, ly = bx + tx_tan * half, by + ty_tan * half
-    rx, ry = bx - tx_tan * half, by - ty_tan * half
-
-    nx, ny = (bx - cx), (by - cy)
-    n_len = hypot(nx, ny)
-    nx, ny = nx / n_len, ny / n_len
-    lx, ly = lx - nx * 2, ly - ny * 2
-    rx, ry = rx - nx * 2, ry - ny * 2
-    draw.polygon([(lx, ly), (rx, ry), point], fill="white", outline="black", width=2)
-
-def draw_vertical_text(img, text, bbox, type, point):
-    FONTSIZE = 10
-    draw = ImageDraw.Draw(img)
-    if type == "dialogue":
-        draw_bubble(img, bbox, type, point)
-    else:
-        gap = 2
-        new_bbox = [bbox[0] - gap, bbox[1] - gap, bbox[2] + gap, bbox[3] + gap]
-        draw.rectangle(new_bbox, fill="white", outline="black", width=2)
-
-    font = ImageFont.truetype(FONTPATH, FONTSIZE)
-    x1, y1, x2, y2 = bbox
-    box_w, box_h   = x2 - x1, y2 - y1
-    line_gap = 0
-    col_gap = 2
-    char_bbox = draw.textbbox((0, 0), "あ", font=font,
-                              direction="ttb", features=["vert", "vrt2"])
-    char_w  = char_bbox[2] - char_bbox[0]
-    char_h  = char_bbox[3] - char_bbox[1]
-
-    max_rows = max(1, (box_h + line_gap) // (char_h + line_gap))
-
-    total_cols = ceil(len(text) / max_rows)
-    needed_w   = total_cols * char_w + (total_cols - 1) * col_gap
-    if needed_w > box_w:
-        raise ValueError("フォントサイズが大き過ぎて bbox 内に収まりません")
-
-    start_x = x2 - char_w
-    step_x  = -(char_w + col_gap)
-
-    start_y = y1
-
-    col = 0
-    for i, ch in enumerate(text):
-        row = i % max_rows
-        # 列が変わるとき
-        if i and row == 0:
-            col += 1
-
-        x = start_x + step_x * col
-        y = start_y + row * (char_h + line_gap)
-
-        draw.text((x, y), ch,
-                  fill="black",
-                  font=font,
-                  direction="ttb",
-                  features=["vert", "vrt2"])
-    return
-
-def draw_speech(pil_image, text, text_info, type, point):
-    TEXT_THRESHOLD = 10
-    for text_info_single in text_info:
-        text_len = len(text)
-        if text_len - text_info_single["length"] > TEXT_THRESHOLD:
-            draw_vertical_text(pil_image, text[:text_info_single["length"]], text_info_single["bbox"], type, point)
-            text = text[text_info_single["length"]:]
-        else:
-            draw_vertical_text(pil_image, text, text_info_single["bbox"], type, point)
-    return
-
-
-
-def generate_name(controlnet_result, base_layout, scored_layouts, panel, name_path):
-    width, height = controlnet_result.canvas_width, controlnet_result.canvas_height
-    pil_image_original = controlnetres2pil(controlnet_result)
-    total_monologue = ""
-    seen_idx = []
-    for ref_layout, score, pairs in scored_layouts[-1:]:
-        pil_image = pil_image_original.copy()
-        for ele in panel:
-            if ele["type"] == "description":
-                continue
-            if ele["type"] == "monologue":
-                total_monologue += ele["content"]
-                continue
-            if ele["type"] == "dialogue":
-                for idx, layout_ele in enumerate(base_layout.elements):
-                    if type(layout_ele) == Speaker:
-                        if idx not in seen_idx:
-                            seen_idx.append(idx)
-                            for pair in pairs:
-                                if pair[0] == idx:
-                                    ref_elem = ref_layout.elements[pair[1]]
-                                    point_x = (layout_ele.bbox[0] + layout_ele.bbox[2]) / 2
-                                    point_y = layout_ele.bbox[1]
-                                    draw_speech(pil_image, ele["content"], ref_elem.text_info, "dialogue" , (point_x, point_y))
-                                    # draw_speaker(pil_image, layout_ele.bbox, ele["speaker"])
-        draw_speech(pil_image, total_monologue, ref_layout.unrelated_text_bbox, "monologue", (0, 0))
-        pil_image.save(name_path)
-
+    def pad(bbox, padding_x, padding_y, image_width, image_height):
+        x1, y1, x2, y2 = bbox
+        x1 = max(0, x1 - padding_x)
+        y1 = max(0, y1 - padding_y)
+        x2 = min(image_width, x2 + padding_x)
+        y2 = min(image_height, y2 + padding_y)
+        return [x1, y1, x2, y2]
     
+    if type == "monologue":
+        draw.rectangle(pad(final_bbox, 5, 5, image_width, image_height), fill="white", outline="black", width=2)
+    elif type == "dialogue":
+        draw.ellipse(pad(final_bbox, 20, 30, image_width, image_height), fill="white", outline="black", width=2)  
+
+    cur_col = 0
+    cur_position = (bbox[2] - char_width, bbox[1])
+    for char in text:
+        draw.text(cur_position, char, font=font, fill="black")
+        cur_col += 1
+        if cur_col == chars_per_col:
+            cur_col = 0
+            cur_position = (cur_position[0] - char_width - horiziontal_margin, bbox[1])
+        else:
+            cur_position = (cur_position[0], cur_position[1] + char_height + vertical_margin)
+
+    return
+
+
+def horizontal_paste(images):
+    base_image = Image.new(
+        "RGB", (sum(img.width for img in images), max(img.height for img in images)), (255, 255, 255))
+    for i, img in enumerate(images):
+        base_image.paste(img, (sum(img.width for img in images[:i]), 0))
+    return base_image
+
+
+def _generate_name(pil_image, base_layout, scored_layout, panel):
+    ref_layout, _, _ = scored_layout
+
+    # QueryレイアウトのSpeakerの数 > 参照レイアウトのSpeakerの数 => 配置できないのでネームの生成は断念
+    num_speakers_in_ref_layout = 0
+    for layout_ele in ref_layout.elements:
+        if type(layout_ele) == Speaker:
+            num_speakers_in_ref_layout += 1
+    num_speakers = 0 
+    for layout_ele in base_layout.elements:
+        if type(layout_ele) == Speaker:
+            num_speakers += 1
+    if num_speakers_in_ref_layout < num_speakers:
+        print("num_speakers_in_ref_layout < num_speakers")
+        return False
+    
+    # 参照レイアウトのSpeakerエレメントを吹き出しの登場順に並び替え
+    def custom_sort(element):
+        if type(element) == NonSpeaker:
+            return -1
+        if element.text_info is None:
+            return 0
+        center_pos = []
+        for text_obj in element.text_info:
+            center_pos.append((text_obj["bbox"][0] + text_obj["bbox"][2]) / 2)
+        return max(center_pos)
+    ref_layout.elements = sorted(ref_layout.elements, key=custom_sort, reverse=True)
+
+    # セリフの位置を参照レイアウトのエレメントをもとに割り当て
+    # 1. QueryレイアウトのSpeakerの数 <= 参照レイアウトのSpeakerの数
+    # 2. 前述の並び替えでSpeakerエレメントはNonSpeakerよりも必ず前側に来る
+    # => NonSpeakerエレメントがセリフ位置の参照に使われることはない
+    panel_pointer = 0
+    for ref_layout_element in ref_layout.elements:
+        while panel_pointer < len(panel) and panel[panel_pointer]["type"] != "dialogue":
+            panel_pointer += 1
+        if panel_pointer >= len(panel):
+            break
+        bbox = [-1,-1,-1,-1]
+        for text_obj in ref_layout_element.text_info:
+            if text_obj["bbox"][2] > bbox[2]:
+                bbox = text_obj["bbox"]
+        draw_vertical_text(pil_image, panel[panel_pointer]["content"], bbox, "dialogue")
+        panel_pointer += 1
+
+    # monologueはpanel上は複数に分かれていても１つとして扱う
+    total_monologue = ""
+    for panel_ele in panel:
+        if panel_ele["type"] == "monologue":
+            total_monologue += panel_ele["content"]
+
+    unrelated_text_bboxes = [bbox["bbox"] for bbox in ref_layout.unrelated_text_bbox]
+    unrelated_text_bboxes = sorted(unrelated_text_bboxes, key=lambda x: x[2], reverse=True)
+    if len(ref_layout.unrelated_text_bbox) > 0:
+        draw_vertical_text(pil_image, total_monologue, unrelated_text_bboxes[0], "monologue")
+    return
+
+
+def generate_name(controlnet_result, base_layout, scored_layout, panel, save_path):
+    width, height = controlnet_result.canvas_width, controlnet_result.canvas_height
+    # pose_only_pil_image = controlnetres2pil(controlnet_result)
+    original_pil_image = Image.open(controlnet_result.base_image_path).resize((width, height))
+    # _generate_name(pose_only_pil_image, base_layout, scored_layout, panel)
+    # _generate_name(controlnet_res_pil_image, base_layout, scored_layout, panel)
+    _generate_name(original_pil_image, base_layout, scored_layout, panel)
+    manga_layout_image = Image.open(scored_layout[0].image_path).resize((width, height))
+    images = [manga_layout_image, original_pil_image]
+    horizontal_pasted_image = horizontal_paste(images)
+    horizontal_pasted_image.save(save_path)
+
+def generate_animepose_image(base_image_path, prompt, save_path):
+    from lib.image.controlnet import generate_with_controlnet_openpose
+    prefix = "((((((((((<lora:anime pose(final):1>)))))))))),anime pose, sketch, white background, detailed, (((line art))), ((((sketch)))), ((((anime pose)))), (((((monochrome))))),"
+    generate_with_controlnet_openpose(base_image_path, prefix + prompt, save_path)
