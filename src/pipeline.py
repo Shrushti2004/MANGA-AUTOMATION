@@ -19,26 +19,27 @@ def parse_args():
         description='Pipeline script for processing')
     parser.add_argument('--script_path', help='Path to the script file')
     parser.add_argument('--output_path', help='Path for output')
+    parser.add_argument('--resume_latest',
+                        action='store_true', help='Debug mode')
     args = parser.parse_args()
     return args
 
 
 def main():
-    debug = True
     NUM_REFERENCES = 5
     args = parse_args()
+    resume_latest = args.resume_latest
     load_dotenv()
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEY is not set")
     if not check_open():
         raise ValueError("ControlNet is not running")
-    if debug:
-        # date_dirs = [d for d in os.listdir(args.output_path) if os.path.isdir(
-        #     os.path.join(args.output_path, d))]
-        # date_dirs.sort(key=lambda x: datetime.strptime(x, "%Y%m%d_%H%M"))
-        # date = date_dirs[-1]
-        # base_dir = os.path.join(args.output_path, date)
-        base_dir = "./output/20250809_1801"
+    if resume_latest:
+        date_dirs = [d for d in os.listdir(args.output_path) if os.path.isdir(
+            os.path.join(args.output_path, d))]
+        date_dirs.sort(key=lambda x: datetime.strptime(x, "%Y%m%d_%H%M"))
+        date = date_dirs[-1]
+        base_dir = os.path.join(args.output_path, date)
         image_base_dir = os.path.join(base_dir, "images")
     else:
         date = datetime.now().strftime("%Y%m%d_%H%M")
