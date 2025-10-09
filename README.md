@@ -71,4 +71,29 @@ python src/pipeline.py --script_path path/to/script.txt --output_path path/to/ou
 実行コマンドの例は`scripts/run_pipeline.sh`に保存した.
 
 
+### 追記
+
+#### Setup.pyの追加
+
+setup.pyを追加し以下を記入
+```
+from setuptools import setup, find_packages
+
+setup(
+    name='bubblealloc',
+    version='0.1',
+    packages=find_packages(),
+    install_requires=[],
+    author='Kazuki Kitano',
+    description='Project aiming for auto allocation of speech bubbles',
+)
+```
+
+#### torchのダウンロード
+
+```
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu126
+```
+
+
 なお, 実行時に`--resume_latest`を指定すると, 最新のディレクトリの途中から実行を開始できる. 画像生成は終わっているが, 吹き出しの配置ができていないなどで有効.
