@@ -31,11 +31,21 @@ def draw_vertical_text(img, text, bbox, type):
         x2 = min(image_width, x2 + padding_x)
         y2 = min(image_height, y2 + padding_y)
         return [x1, y1, x2, y2]
-    
+
     if type == "monologue":
-        draw.rectangle(pad(final_bbox, 5, 5, image_width, image_height), fill="white", outline="black", width=2)
+        draw.rectangle(
+            pad(final_bbox, 5, 5, image_width, image_height),
+            fill="white",
+            outline="black",
+            width=2,
+        )
     elif type == "dialogue":
-        draw.ellipse(pad(final_bbox, 20, 30, image_width, image_height), fill="white", outline="black", width=2)  
+        draw.ellipse(
+            pad(final_bbox, 20, 30, image_width, image_height),
+            fill="white",
+            outline="black",
+            width=2,
+        )
 
     cur_col = 0
     cur_position = (bbox[2] - char_width, bbox[1])
@@ -46,14 +56,20 @@ def draw_vertical_text(img, text, bbox, type):
             cur_col = 0
             cur_position = (cur_position[0] - char_width - horiziontal_margin, bbox[1])
         else:
-            cur_position = (cur_position[0], cur_position[1] + char_height + vertical_margin)
+            cur_position = (
+                cur_position[0],
+                cur_position[1] + char_height + vertical_margin,
+            )
 
     return
 
 
 def horizontal_paste(images):
     base_image = Image.new(
-        "RGB", (sum(img.width for img in images), max(img.height for img in images)), (255, 255, 255))
+        "RGB",
+        (sum(img.width for img in images), max(img.height for img in images)),
+        (255, 255, 255),
+    )
     for i, img in enumerate(images):
         base_image.paste(img, (sum(img.width for img in images[:i]), 0))
     return base_image
@@ -67,14 +83,14 @@ def _generate_name(pil_image, base_layout, scored_layout, panel):
     for layout_ele in ref_layout.elements:
         if type(layout_ele) == Speaker:
             num_speakers_in_ref_layout += 1
-    num_speakers = 0 
+    num_speakers = 0
     for layout_ele in base_layout.elements:
         if type(layout_ele) == Speaker:
             num_speakers += 1
     if num_speakers_in_ref_layout < num_speakers:
         print("num_speakers_in_ref_layout < num_speakers")
         return False
-    
+
     # 参照レイアウトのSpeakerエレメントを吹き出しの登場順に並び替え
     def custom_sort(element):
         if type(element) == NonSpeaker:
@@ -85,6 +101,7 @@ def _generate_name(pil_image, base_layout, scored_layout, panel):
         for text_obj in element.text_info:
             center_pos.append((text_obj["bbox"][0] + text_obj["bbox"][2]) / 2)
         return max(center_pos)
+
     ref_layout.elements = sorted(ref_layout.elements, key=custom_sort, reverse=True)
 
     # セリフの位置を参照レイアウトのエレメントをもとに割り当て
@@ -97,7 +114,7 @@ def _generate_name(pil_image, base_layout, scored_layout, panel):
             panel_pointer += 1
         if panel_pointer >= len(panel):
             break
-        bbox = [-1,-1,-1,-1]
+        bbox = [-1, -1, -1, -1]
         for text_obj in ref_layout_element.text_info:
             if text_obj["bbox"][2] > bbox[2]:
                 bbox = text_obj["bbox"]
@@ -111,25 +128,34 @@ def _generate_name(pil_image, base_layout, scored_layout, panel):
             total_monologue += panel_ele["content"]
 
     unrelated_text_bboxes = [bbox["bbox"] for bbox in ref_layout.unrelated_text_bbox]
-    unrelated_text_bboxes = sorted(unrelated_text_bboxes, key=lambda x: x[2], reverse=True)
+    unrelated_text_bboxes = sorted(
+        unrelated_text_bboxes, key=lambda x: x[2], reverse=True
+    )
     if len(ref_layout.unrelated_text_bbox) > 0:
-        draw_vertical_text(pil_image, total_monologue, unrelated_text_bboxes[0], "monologue")
+        draw_vertical_text(
+            pil_image, total_monologue, unrelated_text_bboxes[0], "monologue"
+        )
     return
 
 
 def generate_name(controlnet_result, base_layout, scored_layout, panel, save_path):
     width, height = controlnet_result.canvas_width, controlnet_result.canvas_height
     # pose_only_pil_image = controlnetres2pil(controlnet_result)
-    original_pil_image = Image.open(controlnet_result.base_image_path).resize((width, height))
+    original_pil_image = Image.open(controlnet_result.base_image_path).resize(
+        (width, height)
+    )
     # _generate_name(pose_only_pil_image, base_layout, scored_layout, panel)
     # _generate_name(controlnet_res_pil_image, base_layout, scored_layout, panel)
     _generate_name(original_pil_image, base_layout, scored_layout, panel)
     manga_layout_image = Image.open(scored_layout[0].image_path).resize((width, height))
     images = [manga_layout_image, original_pil_image]
+    original_pil_image.save(save_path.replace(".png", "_onlyname.png"))
     horizontal_pasted_image = horizontal_paste(images)
     horizontal_pasted_image.save(save_path)
 
+
 def generate_animepose_image(base_image_path, prompt, save_path):
     from lib.image.controlnet import generate_with_controlnet_openpose
+
     prefix = "((((((((((<lora:anime pose(final):1>)))))))))),anime pose, sketch, white background, detailed, (((line art))), ((((sketch)))), ((((anime pose)))), (((((monochrome))))),"
     generate_with_controlnet_openpose(base_image_path, prefix + prompt, save_path)
