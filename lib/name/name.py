@@ -34,14 +34,14 @@ def draw_vertical_text(img, text, bbox, type):
 
     if type == "monologue":
         draw.rectangle(
-            pad(final_bbox, 5, 5, image_width, image_height),
+            pad(final_bbox, 10, 10, image_width, image_height),
             fill="white",
             outline="black",
-            width=2,
+            width=3,
         )
     elif type == "dialogue":
         draw.ellipse(
-            pad(final_bbox, 20, 30, image_width, image_height),
+            pad(final_bbox, 20, 30, image_width, image_height) ,
             fill="white",
             outline="black",
             width=2,
@@ -118,6 +118,7 @@ def _generate_name(pil_image, base_layout, scored_layout, panel):
         for text_obj in ref_layout_element.text_info:
             if text_obj["bbox"][2] > bbox[2]:
                 bbox = text_obj["bbox"]
+        
         draw_vertical_text(pil_image, panel[panel_pointer]["content"], bbox, "dialogue")
         panel_pointer += 1
 
@@ -157,5 +158,5 @@ def generate_name(controlnet_result, base_layout, scored_layout, panel, save_pat
 def generate_animepose_image(base_image_path, prompt, save_path):
     from lib.image.controlnet import generate_with_controlnet_openpose
 
-    prefix = "((((((((((<lora:anime pose(final):1>)))))))))),anime pose, sketch, white background, detailed, (((line art))), ((((sketch)))), ((((anime pose)))), (((((monochrome))))),"
+    prefix = "(((((<lora:Pose_Sketches_SD1.5:1>))))) (messy:1.5), (scribble:1.4), (bad art:1.3), lineart, clean lines, sketches, simple,  (monochrome:2), (white background:1.5)"
     generate_with_controlnet_openpose(base_image_path, prefix + prompt, save_path)

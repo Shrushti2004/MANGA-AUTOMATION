@@ -5,13 +5,16 @@ import base64
 import json
 import time
 import requests
-from tqdm import tqdm, trange
-from datetime import datetime
+from tqdm import tqdm
 from lib.image.prompt import generate_prompt_prompt, enhancement_prompt
 
+# -------------------------------
+# Enhance prompts using GPT-4o
+# -------------------------------
 def enhance_prompts(client, prompts, output_path):
-    if os.path.exists(os.path.join(output_path, "enhanced_image_prompts.json")):
-        with open(os.path.join(output_path, "enhanced_image_prompts.json"), "r", encoding="utf-8") as f:
+    output_file = os.path.join(output_path, "enhanced_image_prompts.json")
+    if os.path.exists(output_file):
+        with open(output_file, "r", encoding="utf-8") as f:
             return json.load(f)
 
     new_prompts = []
@@ -24,106 +27,124 @@ def enhance_prompts(client, prompts, output_path):
         for attempt in range(max_retry):
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o", messages=messages, temperature=0.0, store=False
+                    model="gpt-4o",
+                    messages=messages,
+                    temperature=0.0
                 )
                 result = response.choices[0].message.content
                 new_prompts.append(result)
                 break
             except json.JSONDecodeError as e:
                 print(f"JSONDecodeError: {e}")
-                if attempt < max_retry:
-                    time.sleep(1)
-                    print(f"Retrying... ({attempt + 1}/{max_retry})")
-                else:
-                    raise Exception("Failed to enhance prompt")
+                time.sleep(1)
             except Exception as e:
                 print(f"Error: {e}")
-                if attempt < max_retry:
-                    time.sleep(1)
-                    print(f"Retrying... ({attempt + 1}/{max_retry})")
-                else:
-                    raise Exception("Failed to enhance prompt")
-    with open(os.path.join(output_path, "enhanced_image_prompts.json"), "w", encoding="utf-8") as f:
+                time.sleep(1)
+        else:
+            raise Exception("Failed to enhance prompt")
+    
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(new_prompts, f, ensure_ascii=False, indent=4)
     return new_prompts
 
+# -------------------------------
+# Generate image prompts from panels
+# -------------------------------
 def generate_image_prompts(client, panels, speakers, output_path, max_retry=3):
-    if os.path.exists(os.path.join(output_path, "image_prompts.json")):
-        with open(os.path.join(output_path, "image_prompts.json"), "r", encoding="utf-8") as f:
+    output_file = os.path.join(output_path, "image_prompts.json")
+    if os.path.exists(output_file):
+        with open(output_file, "r", encoding="utf-8") as f:
             return json.load(f)
 
+    # Step 1: Romanize speakers
     messages = [
-        {"role": "system", "content": "What is the Japanese Roman Name of the following names? MUST Answer in the format of list [name1, name2, ...]. DO NOT change the order."},
+        {"role": "system", "content": "Convert these names to Japanese Romanization. Return as [name1, name2,...]"},
         {"role": "user", "content": json.dumps(speakers)},
     ]
     roman_names = []
-    print("Changing letters to romanization...")
     for attempt in range(max_retry):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o", messages=messages, temperature=0.0, store=False
+                model="gpt-4o",
+                messages=messages,
+                temperature=0.0
             )
-            result = response.choices[0].message.content
-            roman_names = json.loads(result)
+            roman_names = json.loads(response.choices[0].message.content)
             break
-        except json.JSONDecodeError as e:
-            print(f"JSONDecodeError: {e}")
-            if attempt < max_retry:
-                time.sleep(1)
-                print(f"Retrying... ({attempt + 1}/{max_retry})")
-            else:
-                raise Exception("Failed to generate romanization")
+        except Exception as e:
+            print(f"Retry {attempt+1}/{max_retry} failed: {e}")
+            time.sleep(1)
     print(f"Romanization: {roman_names}")
+
+    # Step 2: Generate prompts for each panel
     prompts = []
-    for i in range(len(panels)):
-        descriptions = [desc for desc in panels[i] if desc["type"] == "description"]
-        monologues = [monologue for monologue in panels[i] if monologue["type"] == "monologue"]
-        dialogues = [dialogue for dialogue in panels[i] if dialogue["type"] == "dialogue"]
-        additional_guideines = f"**Change the letters {speakers} to the following romanization {roman_names}. You MUST assume that {speakers} are the human names**"
+    for i, panel in enumerate(panels):
+        descriptions = [d for d in panel if d["type"] == "description"]
+        monologues = [m for m in panel if m["type"] == "monologue"]
+        dialogues = [d for d in panel if d["type"] == "dialogue"]
+        additional_guidelines = f"Change letters {speakers} to romanization {roman_names}."
+
         messages = [
-            {"role": "system", "content": generate_prompt_prompt.format(descriptions=descriptions, monologues=monologues, dialogues=dialogues, additional_guideines=additional_guideines)},
+            {"role": "system", "content": generate_prompt_prompt.format(
+                descriptions=descriptions, 
+                monologues=monologues, 
+                dialogues=dialogues, 
+                additional_guideines=additional_guidelines
+            )}
         ]
-        response = client.chat.completions.create(
-            model="gpt-4o", messages=messages, temperature=0.0, store=False
-        )
-        result = response.choices[0].message.content
-        prompts.append(result)
-        with open(os.path.join(output_path, "image_prompts.json"), "w", encoding="utf-8") as f:
+        for attempt in range(max_retry):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    temperature=0.0
+                )
+                prompts.append(response.choices[0].message.content)
+                break
+            except Exception as e:
+                print(f"Retry {attempt+1}/{max_retry} failed: {e}")
+                time.sleep(1)
+        else:
+            raise Exception("Failed to generate image prompts")
+
+        # Save after each panel
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(prompts, f, ensure_ascii=False, indent=4)
     return prompts
 
-def generate_image(client, prompt, image_path,num_retry=5):
+# -------------------------------
+# Generate image using DALL·E 3
+# -------------------------------
+def generate_image(client, prompt, image_path, num_retry=5):
     for attempt in range(num_retry):
         try:
-            item = client.images.generate(
+            result = client.images.generate(
                 model="dall-e-3",
                 prompt=prompt,
                 size="1024x1024",
-                quality="standard",
+                quality="standard"
             ).data[0]
-            image_url = item.url
+            image_url = result.url
             img_response = requests.get(image_url, stream=True)
             if img_response.status_code == 200:
-                with open(image_path, 'wb') as out_file:
+                with open(image_path, "wb") as f:
                     for chunk in img_response.iter_content(1024):
-                        out_file.write(chunk)
+                        f.write(chunk)
                 break
         except Exception as e:
-            if attempt < num_retry:
-                time.sleep(1)
-                print(f"Error: {e}")
-                print(f"Retrying... ({attempt + 1}/{num_retry})")
-            else:
-                raise Exception("Failed to generate images")
-    return
+            print(f"Attempt {attempt+1} failed: {e}")
+            time.sleep(1)
+    else:
+        raise Exception("Failed to generate image")
 
+# -------------------------------
+# Generate image with local Stable Diffusion
+# -------------------------------
 def generate_image_with_sd(prompt, image_path):
-    model="T-anime-v4"
+    model = "tAnimeV4Pruned_v20"
     payload = {
         "prompt": prompt,
-        "override_settings" : {
-            "sd_model_checkpoint" : model,
-        },
+        "override_settings": {"sd_model_checkpoint": model},
         "width": 512,
         "height": 512,
     }
@@ -132,4 +153,3 @@ def generate_image_with_sd(prompt, image_path):
     image_bytes = io.BytesIO(base64.b64decode(image_base64))
     image = Image.open(image_bytes)
     image.save(image_path)
-    return
