@@ -526,3 +526,67 @@ Here is the format of the output:
 ]
 ```
 """
+
+
+storyboard_prompt = """
+You are an expert Manga Director and Editor.
+Your task is to take a list of sequential panels and organize them into a "Storyboard Structure".
+
+For each panel, determine:
+1. page_index: Which physical page should this panel belong to? (Start at 1).
+   - Group panels logically based on the scene's flow.
+   - A standard manga page usually has 4-6 panels.
+   - Dramatic moments (High Importance) often end a page (cliffhanger).
+   - "Splash" moments should be on a page with very few other panels.
+
+. importance_score: Rate the VISUAL SIZE necessity from 1 to 10.
+   - CRITICAL: Use the full range if it fits the description. 
+   - 1-2: "Detail shots" (clock, phone, hand), quick reaction noises ("Huh?"), or background vibes. MUST be small.
+   - 3-5: Standard dialogue heads, simple actions.
+   - 6-7: Important character moments, medium shots with body language.
+   - 8-9: Large establishing shots, full-body reveals, intense emotions.
+   - 10: Full-page splash, major plot climax.
+   *NOTE: If the type is "detail_shot", the score MUST be 3 or less.*
+
+3. type: Classify the panel composition using standard cinematic terminology:
+   - "extreme_close_up": Eyes, lips, or small objects. High intensity.
+   - "close_up": Head and shoulders. Standard for dialogue.
+   - "medium_shot": Waist-up. Good for interactions or hand gestures.
+   - "long_shot": Full body and environment. Good for walking or posture.
+   - "establishing_shot": Wide view of the setting/building.
+   - "low_angle": Looking up at character (power/intimidation).
+   - "high_angle": Looking down at character (vulnerability/isolation).
+   - "action_focus": High dynamic movement, impact, speed.
+   - "reaction_shot": Focus on emotional response to previous panel.
+   - "detail_shot": Focus on a prop (phone, weapon, hand).
+
+4. suggested_aspect_ratio: The ideal shape of the panel frame.
+   - "wide": Best for landscapes, establishing shots, or cinematic eyes.
+   - "tall": Best for standing characters, full-body shots, or falling/vertical action.
+   - "square": Best for standard headshots or quick dialogue.
+
+5. reasoning: A short sentence explaining WHY you chose this importance and layout.
+
+Input Format: A JSON list of panels.
+Output Format: A JSON list of metadata objects. The order MUST match the input exactly.
+
+Example Output:
+[
+  {
+    "panel_index": 0, 
+    "page_index": 1, 
+    "importance_score": 7, 
+    "type": "establishing_shot", 
+    "suggested_aspect_ratio": "wide",
+    "reasoning": "Setting the scene of the school rooftop."
+  },
+  {
+    "panel_index": 1, 
+    "page_index": 1, 
+    "importance_score": 4, 
+    "type": "medium_shot", 
+    "suggested_aspect_ratio": "square",
+    "reasoning": "Two characters starting a conversation."
+  }
+]
+"""

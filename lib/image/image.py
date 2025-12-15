@@ -140,13 +140,13 @@ def generate_image(client, prompt, image_path, num_retry=5):
 # -------------------------------
 # Generate image with local Stable Diffusion
 # -------------------------------
-def generate_image_with_sd(prompt, image_path):
+def generate_image_with_sd(prompt, image_path, width=512, height=512):
     model = "tAnimeV4Pruned_v20"
     payload = {
         "prompt": prompt,
         "override_settings": {"sd_model_checkpoint": model},
-        "width": 512,
-        "height": 512,
+        "width": width,
+        "height": height,
     }
     response = requests.post("http://127.0.0.1:7860/sdapi/v1/txt2img", json=payload).json()
     image_base64 = response["images"][0]

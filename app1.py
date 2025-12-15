@@ -8,7 +8,7 @@ from datetime import datetime
 import re
 from collections import defaultdict
 import sys
-
+import base64
 # --- 1. SETUP & IMPORTS ---
 try:
     from lib.layout.layout import MangaLayout
@@ -367,27 +367,82 @@ if view_path and os.path.exists(view_path):
                             col.error(f"Error: {e}")
 
 # --- PDF PREVIEW & DOWNLOAD ---
-st.subheader("📄 Manga PDF Preview / Download")
+st.subheader("Manga PDF Preview / Download")
 
 if view_path and os.path.exists(view_path):
-    pdf_candidates = glob.glob(os.path.join(view_path, "**", "manga.pdf"), recursive=True)
     
-    if pdf_candidates:
-        pdf_path = pdf_candidates[0]
+    # 1. LOCATE FILES
+    # Find Old PDF (manga.pdf)
+    old_pdf_path = None
+    old_candidates = glob.glob(os.path.join(view_path, "*", "manga.pdf"))
+    if old_candidates:
+        old_pdf_path = old_candidates[0]
+
+    # Find New PDF (Manga_Chapter_*.pdf)
+    new_pdf_path = None
+    new_candidates = glob.glob(os.path.join(view_path, "Manga_Chapter_*.pdf"))
+    if not new_candidates:
+        # Fallback search if recursively hidden
+        new_candidates = glob.glob(os.path.join(view_path, "**", "Manga_Chapter_*.pdf"), recursive=True)
+    if new_candidates:
+        new_pdf_path = new_candidates[0]
+
+    # 2. DOWNLOAD BUTTONS (Side by Side)
+    col_d1, col_d2 = st.columns(2)
+    
+    with col_d1:
+        if old_pdf_path:
+            with open(old_pdf_path, "rb") as f:
+                st.download_button(
+                    label="📥 Download Manga PDF (Grid)",
+                    data=f.read(),
+                    file_name="manga.pdf",
+                    mime="application/pdf"
+                )
+        else:
+            st.warning("Manga PDF (manga.pdf) not found.")
+
+    with col_d2:
+        if new_pdf_path:
+            with open(new_pdf_path, "rb") as f:
+                st.download_button(
+                    label="📥 Download Stylized Manga PDF (Layout)",
+                    data=f.read(),
+                    file_name="manga_layout.pdf",
+                    mime="application/pdf"
+                )
+        else:
+            st.warning("Stylized Manga PDF (Manga_Chapter_*.pdf) not found.")
+
+    st.markdown("---")
+
+ # 3. DISPLAY OLD PDF (FIXED)
+    if old_pdf_path:
+        if os.path.getsize(old_pdf_path) < 1500:
+            st.error("⚠️ Cannot display manga.pdf — it is corrupted.")
+        else:
+            st.markdown("### Manga PDF (Grid Version)")
+            try:
+                with open(old_pdf_path, "rb") as f:
+                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+                st.markdown(pdf_display, unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error displaying Grid PDF: {e}")
+    
+    st.markdown("---")
+
+    # 4. DISPLAY NEW PDF RESULT
+    if new_pdf_path:
+        st.markdown("### Stylized Manga PDF Result")
         try:
-            with open(pdf_path, "rb") as f:
-                pdf_bytes = f.read()
-
-            st.download_button(
-                label="📥 Download Manga PDF",
-                data=pdf_bytes,
-                file_name="manga.pdf",
-                mime="application/pdf"
-            )
-
+            with open(new_pdf_path, "rb") as f:
+                base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+            # Embed PDF using iframe
+            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
         except Exception as e:
-            st.error(f"Error displaying PDF: {e}")
-    else:
-        st.info("No manga.pdf found in the selected run folder or its subfolders.")
+            st.error(f"Error displaying New PDF: {e}")
+
 else:
     st.info("No run folder selected.")

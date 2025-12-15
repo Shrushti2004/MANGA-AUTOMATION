@@ -9,8 +9,7 @@ import re
 from collections import defaultdict
 import sys
 import base64
-import streamlit.components.v1 as components
-
+from streamlit_pdf_viewer import pdf_viewer
 # --- 1. SETUP & IMPORTS ---
 try:
     from lib.layout.layout import MangaLayout
@@ -79,7 +78,6 @@ if st.button("🚀 Generate Panels", type="primary"):
                 bufsize=1
             )
 
-            # Capture logs in real-time
             for line in process.stdout:
                 full_log_buffer += line
                 live_log_placeholder.text_area("Executing...", value=full_log_buffer, height=300)
@@ -93,7 +91,7 @@ if st.button("🚀 Generate Panels", type="primary"):
             else:
                 st.success("Generation Complete!")
                 st.session_state['current_view_path'] = output_dir
-                st.rerun()  # Refresh to update Results View
+                st.rerun()
 
         except Exception as e:
             st.error(f"Error running pipeline: {e}")
@@ -117,7 +115,7 @@ def get_run_folders():
     return sorted(dirs, reverse=True)
 
 run_folders = get_run_folders()
-run_options = ["Select a run"] + run_folders
+run_options = ["Select a run..."] + run_folders
 
 current_index = 0
 if st.session_state['current_view_path']:
@@ -125,7 +123,7 @@ if st.session_state['current_view_path']:
     if current_folder_name in run_options:
         current_index = run_options.index(current_folder_name)
 
-col_sel, _ = st.columns([1, 2])
+col_sel, col_dummy = st.columns([1, 2])
 with col_sel:
     selected_run_name = st.selectbox(
         "Choose a run to inspect:",
@@ -133,9 +131,35 @@ with col_sel:
         index=current_index
     )
 
-view_path = os.path.join(OUTPUT_ROOT, selected_run_name) if selected_run_name != "Select a run" else None
+if selected_run_name != "Select a run...":
+    view_path = os.path.join(OUTPUT_ROOT, selected_run_name)
+else:
+    view_path = None
 
+# CSS fixes
+st.markdown("""
+<style>
+    .stTabs [data-baseweb="tab-list"] { flex-wrap: wrap; gap: 10px; }
+    .stTabs [data-baseweb="tab-highlight"] { display: none; }
+    .stTabs [data-baseweb="tab"] { height: 30px; white-space: pre-wrap; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-width: 20px;
+    border-radius: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------------
+#     IMAGE LOADING + PER-PANEL FALLBACK
+# -------------------------------
 if view_path and os.path.exists(view_path):
+
+    # --- VIEW SETTINGS ---
     with st.expander("⚙️ View Settings", expanded=True):
         col_sort, col_filter = st.columns(2)
         with col_sort:
@@ -145,48 +169,90 @@ if view_path and os.path.exists(view_path):
                 horizontal=True
             )
         with col_filter:
-            show_best_only = st.checkbox(" Show Only Best Candidate per Panel")
+            show_best_only = st.checkbox("🏆 Show Only Best Candidate per Panel")
 
-    # --- Collect images with fallback ---
-    images_root = os.path.join(view_path, "*", "images")
-    panel_groups = defaultdict(list)
-    panel_pattern = re.compile(r"(panel\d+)")
+    # ---------- Build panel list from folder names ----------
+    panel_dirs = glob.glob(os.path.join(view_path, "*", "images", "panel*"))
+    panel_names = []
+    for p in panel_dirs:
+        folder = os.path.basename(p)
+        if folder.startswith("panel"):
+            panel_names.append(folder)
+    panel_names = sorted(set(panel_names))
 
-    # Scan all panel directories
-    panel_dirs = glob.glob(os.path.join(images_root, "panel*"))
-    for panel_path in panel_dirs:
-        # Try _onlyname.png first
-        images_onlyname = glob.glob(os.path.join(panel_path, "*_onlyname.png"))
-        if images_onlyname:
-            for img_path in images_onlyname:
-                match = panel_pattern.search(img_path)
-                if match:
-                    panel_name = match.group(1)
-                    panel_groups[panel_name].append(img_path)
-        else:
-            # Fallback to *_anime.png
-            images_anime = glob.glob(os.path.join(panel_path, "*_anime.png"))
-            for img_path in images_anime:
-                match = panel_pattern.search(img_path)
-                if match:
-                    panel_name = match.group(1)
-                    panel_groups[panel_name].append(img_path)
-
-    if not panel_groups:
-        st.warning(f"No images found in `{selected_run_name}`.")
+    if not panel_names:
+        st.warning(f"No panel folders found in `{selected_run_name}`.")
     else:
-        panel_names = sorted(panel_groups.keys())
+        # For each panel, try per-panel fallback
+        panel_groups = {}             # panel_name -> list of image paths
+        panel_fallbacks = {}          # panel_name -> "onlyname" | "anime" | "none"
+
+        for panel_name in panel_names:
+            # Determine the folder for this panel
+            panel_dir = os.path.join(view_path, "*", "images", panel_name)
+            # glob to match possible nested structure (some runs may have different nesting)
+            matched_dirs = glob.glob(panel_dir)
+            images = []
+            fallback = "none"
+            if matched_dirs:
+                # use first matched dir (expected to be one)
+                pdir = matched_dirs[0]
+                onlyname_pattern = os.path.join(pdir, "*_onlyname.png")
+                anime_pattern = os.path.join(pdir, "*_anime.png")
+
+                images = sorted(glob.glob(onlyname_pattern))
+                if images:
+                    fallback = "onlyname"
+                else:
+                    images = sorted(glob.glob(anime_pattern))
+                    if images:
+                        fallback = "anime"
+                    else:
+                        images = []
+                        fallback = "none"
+            else:
+                # If there is no images/ panel folder found due to unexpected structure,
+                # attempt looser search across any subfolders of the run
+                loose_only = glob.glob(os.path.join(view_path, "**", panel_name, "*_onlyname.png"), recursive=True)
+                if loose_only:
+                    images = sorted(loose_only)
+                    fallback = "onlyname"
+                else:
+                    loose_anime = glob.glob(os.path.join(view_path, "**", panel_name, "*_anime.png"), recursive=True)
+                    if loose_anime:
+                        images = sorted(loose_anime)
+                        fallback = "anime"
+                    else:
+                        images = []
+                        fallback = "none"
+
+            panel_groups[panel_name] = images
+            panel_fallbacks[panel_name] = fallback
+
+        # Create tabs for every panel (even empty ones)
         tabs = st.tabs(panel_names)
-        
+
+        # Panel name regex for extracting ids from filenames
+        panel_pattern = re.compile(r"(panel\d+)")
+
         for i, panel_name in enumerate(panel_names):
             with tabs[i]:
-                image_list = panel_groups[panel_name]
-                
-                scores_map = {} 
-                if image_list:
-                    panel_img_dir = os.path.dirname(image_list[0])
+                image_list = panel_groups.get(panel_name, [])
+                fallback_used = panel_fallbacks.get(panel_name, "none")
+
+                # Determine the panel image directory for scores.json lookup
+                # find a candidate directory that contains this panel
+                candidate_dirs = glob.glob(os.path.join(view_path, "*", "images", panel_name))
+                panel_img_dir = candidate_dirs[0] if candidate_dirs else None
+                # If not found, attempt recursive search
+                if not panel_img_dir:
+                    rec = glob.glob(os.path.join(view_path, "**", panel_name), recursive=True)
+                    panel_img_dir = rec[0] if rec else None
+
+                # Load scores.json if present in panel image dir
+                scores_map = {}
+                if panel_img_dir:
                     score_file = os.path.join(panel_img_dir, "scores.json")
-                    
                     if os.path.exists(score_file):
                         try:
                             with open(score_file, "r", encoding="utf-8") as f:
@@ -202,28 +268,49 @@ if view_path and os.path.exists(view_path):
                                             "sim": layout.get("sim_score", 0),
                                             "geom": layout.get("geom_penalty", 999)
                                         }
-                        except Exception: pass
+                        except Exception:
+                            # ignore score parsing errors
+                            pass
 
+                # If no images found for this panel, show notice but keep tab visible
+                if not image_list:
+                    if fallback_used == "none":
+                        st.warning(f"No images found for **{panel_name}**.")
+                    else:
+                        # This branch should not occur since fallback_used would be 'anime' or 'onlyname' when images exist
+                        st.warning(f"No images found for **{panel_name}** (fallback attempted: {fallback_used}).")
+                    # continue to next tab (keeps the tab visible)
+                    continue
+
+                # Build display items with scores
                 display_items = []
                 for img_path in image_list:
                     try:
                         fname = os.path.basename(img_path)
                         parts = fname.split("_")
-                        var_id = int(parts[0])
-                        rank_id = int(parts[2])
+                        # attempt parsing var and rank; fallback to name-based sorting if parse fails
+                        var_id = int(parts[0]) if parts and parts[0].isdigit() else None
+                        rank_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
                         
-                        s = scores_map.get((var_id, rank_id), {
-                            "final": -999, "clip": 0, "sim": 0, "geom": 0
-                        })
+                        # if parse succeeded and scores available, pick them; else default
+                        s = {"final": -999, "clip": 0, "sim": 0, "geom": 0}
+                        if var_id is not None and rank_id is not None:
+                            s = scores_map.get((var_id, rank_id), s)
                         
                         display_items.append({
                             "path": img_path,
                             "name": fname,
                             "score": s
                         })
-                    except:
-                        continue
+                    except Exception:
+                        # if anything unexpected in filename, still include image with default score
+                        display_items.append({
+                            "path": img_path,
+                            "name": os.path.basename(img_path),
+                            "score": {"final": -999, "clip": 0, "sim": 0, "geom": 0}
+                        })
 
+                # Sorting
                 if sort_mode == "Highest Total Score":
                     display_items.sort(key=lambda x: x["score"]["final"], reverse=True)
                 elif sort_mode == "Lowest Penalty":
@@ -231,16 +318,21 @@ if view_path and os.path.exists(view_path):
                 else:
                     display_items.sort(key=lambda x: x["name"])
 
+                # Best-only filter
                 if show_best_only and display_items:
                     if sort_mode == "Lowest Penalty":
-                         best = min(display_items, key=lambda x: x["score"]["geom"])
-                         display_items = [best]
+                        best = min(display_items, key=lambda x: x["score"]["geom"])
                     else:
-                         best = max(display_items, key=lambda x: x["score"]["final"])
-                         display_items = [best]
+                        best = max(display_items, key=lambda x: x["score"]["final"])
+                    display_items = [best]
 
+                # If we used anime fallback for this panel, show an inline warning
+                if fallback_used == "anime":
+                    st.warning(f"No `_onlyname.png` images for **{panel_name}** — showing `_anime.png` fallback for this panel.")
+
+                # Display images in 3 columns
                 if not display_items:
-                    st.info("No images found.")
+                    st.info("No images to show for this panel after filtering.")
                 else:
                     cols = st.columns(3)
                     for j, item in enumerate(display_items):
@@ -251,47 +343,113 @@ if view_path and os.path.exists(view_path):
                             col.image(item["path"], caption=item["name"], use_container_width=True)
                             
                             if s["final"] != -999:
-                                score_color = "green" if float(s['final']) > 80 else "orange" if float(s['final']) > 50 else "red"
-                                border_color = "#d4edda" if float(s['final']) > 80 else "#fff3cd" if float(s['final']) > 50 else "#f8d7da"
+                                # choose color and border depending on score
+                                try:
+                                    final_val = float(s['final'])
+                                except Exception:
+                                    final_val = -999.0
+                                score_color = "green" if final_val > 80 else "orange" if final_val > 50 else "red"
+                                border_color = "#d4edda" if final_val > 80 else "#fff3cd" if final_val > 50 else "#f8d7da"
                                 
                                 col.markdown(f"""
                                 <div style="text-align:center; background-color:{border_color}; padding:8px; border-radius:8px; margin-bottom:15px; border:1px solid {score_color};">
                                     <div style="font-size:20px; font-weight:bold; color:{score_color};">
-                                        {float(s['final']):.1f}
+                                        {final_val:.1f}
                                     </div>
                                     <div style="font-size:11px; color:#444; margin-top:4px;">
-                                        CLIP: <b>{float(s['clip']):.2f}</b> • Sim: <b>{float(s['sim']):.2f}</b>
+                                        CLIP: <b>{float(s.get('clip', 0)):.2f}</b> • Sim: <b>{float(s.get('sim', 0)):.2f}</b>
                                     </div>
                                     <div style="font-size:11px; color:#d9534f; font-weight:bold;">
-                                        Penalty: -{float(s['geom']):.1f}
+                                        Penalty: -{float(s.get('geom', 0)):.1f}
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
                         except Exception as e:
                             col.error(f"Error: {e}")
 
-# --- PDF PREVIEW & DOWNLOAD (Auto-detect in selected run folder and subfolders) ---
-st.subheader("📄 Manga PDF Preview / Download")
+# --- PDF PREVIEW & DOWNLOAD ---
+st.subheader("Manga PDF Preview / Download")
 
 if view_path and os.path.exists(view_path):
-    pdf_candidates = glob.glob(os.path.join(view_path, "**", "manga.pdf"), recursive=True)
     
-    if pdf_candidates:
-        pdf_path = pdf_candidates[0]  # take first found
+    # 1. LOCATE FILES
+    # Find Old PDF (manga.pdf)
+    old_pdf_path = None
+    old_candidates = glob.glob(os.path.join(view_path, "*", "manga.pdf"))
+    if old_candidates:
+        old_pdf_path = old_candidates[0]
+
+    # Find New PDF (Manga_Chapter_*.pdf)
+    new_pdf_path = None
+    new_candidates = glob.glob(os.path.join(view_path, "Manga_Chapter_*.pdf"))
+    if not new_candidates:
+        # Fallback search if recursively hidden
+        new_candidates = glob.glob(os.path.join(view_path, "**", "Manga_Chapter_*.pdf"), recursive=True)
+    if new_candidates:
+        new_pdf_path = new_candidates[0]
+
+    # 2. DOWNLOAD BUTTONS (Side by Side)
+    col_d1, col_d2 = st.columns(2)
+    
+    with col_d1:
+        if old_pdf_path:
+            try:
+                with open(old_pdf_path, "rb") as f:
+                    old_bytes = f.read()
+                if len(old_bytes) < 1500:
+                    st.error("⚠️ Found manga.pdf but it's EMPTY or CORRUPTED.")
+                else:
+                    st.download_button(
+                        label="📥 Download Manga PDF (Grid)",
+                        data=old_bytes,
+                        file_name="manga.pdf",
+                        mime="application/pdf"
+                    )
+            except Exception as e:
+                st.error(f"Error reading manga.pdf: {e}")
+        else:
+            st.warning("Manga PDF (manga.pdf) not found.")
+
+    with col_d2:
+        if new_pdf_path:
+            try:
+                with open(new_pdf_path, "rb") as f:
+                    new_bytes = f.read()
+                if len(new_bytes) < 1500:
+                    st.error("⚠️ Found Manga_Chapter_*.pdf but it's very small / possibly corrupted.")
+                else:
+                    st.download_button(
+                        label="📥 Download Stylized Manga PDF (Layout)",
+                        data=new_bytes,
+                        file_name="manga_layout.pdf",
+                        mime="application/pdf"
+                    )
+            except Exception as e:
+                st.error(f"Error reading stylized PDF: {e}")
+        else:
+            st.warning("Stylized Manga PDF (Manga_Chapter_*.pdf) not found.")
+
+    st.markdown("---")
+
+
+# 3. DISPLAY OLD PDF RESULT
+    if old_pdf_path:
+        print(old_pdf_path)
+        st.markdown("### Manga PDF Result")
         try:
-            with open(pdf_path, "rb") as f:
-                pdf_bytes = f.read()
-
-            st.download_button(
-                label="📥 Download Manga PDF",
-                data=pdf_bytes,
-                file_name="manga.pdf",
-                mime="application/pdf"
-            )
-
+            pdf_viewer(old_pdf_path, height=500,width=1000)
         except Exception as e:
-            st.error(f"Error displaying PDF: {e}")
-    else:
-        st.info("No manga.pdf found in the selected run folder or its subfolders.")
+            st.error(f"Error displaying Old PDF: {e}")
+    
+    st.markdown("---")
+
+    # 4. DISPLAY NEW PDF RESULT
+    if new_pdf_path:
+        st.markdown("### Stylized Manga PDF Result")
+        try:
+            pdf_viewer(new_pdf_path, height=500,width=1000)
+        except Exception as e:
+            st.error(f"Error displaying New PDF: {e}")
+
 else:
     st.info("No run folder selected.")

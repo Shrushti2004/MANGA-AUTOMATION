@@ -97,3 +97,6 @@ pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https
 
 
 なお, 実行時に`--resume_latest`を指定すると, 最新のディレクトリの途中から実行を開始できる. 画像生成は終わっているが, 吹き出しの配置ができていないなどで有効.
+=======
+# MANGA-AUTOMATION
+>>>>>>> 6466af625c5f8b0ea34c54698b2486edd27607e3

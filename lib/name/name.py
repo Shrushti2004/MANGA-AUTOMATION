@@ -155,8 +155,8 @@ def generate_name(controlnet_result, base_layout, scored_layout, panel, save_pat
     horizontal_pasted_image.save(save_path)
 
 
-def generate_animepose_image(base_image_path, prompt, save_path):
+def generate_animepose_image(base_image_path, prompt, save_path, width=512, height=512):
     from lib.image.controlnet import generate_with_controlnet_openpose
 
     prefix = "(((((<lora:Pose_Sketches_SD1.5:1>))))) (messy:1.5), (scribble:1.4), (bad art:1.3), lineart, clean lines, sketches, simple,  (monochrome:2), (white background:1.5)"
-    generate_with_controlnet_openpose(base_image_path, prefix + prompt, save_path)
+    generate_with_controlnet_openpose(base_image_path, prefix + prompt, save_path, width=width, height=height)

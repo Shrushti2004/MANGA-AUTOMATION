@@ -4,6 +4,8 @@ from datetime import datetime
 import json
 import os
 from dotenv import load_dotenv
+from PIL import Image
+
 
 from lib.layout.layout import generate_layout, similar_layouts
 from lib.script.divide import divide_script, ele2panels, refine_elements
@@ -14,8 +16,16 @@ from lib.scoring.scorer import load_clip_model, get_verification_prompt, calcula
 
 from openai import OpenAI
 
-# ✅ Import composer for PDF generation
+# PDF composer
 from lib.page.composer import compose_manga_pdf
+
+# Storyboard analyzer (now uses GPT)
+from lib.script.analyze import analyze_storyboard
+
+from lib.page.layout_generator import CaoInitialLayout
+from lib.page.layout_optimizer import LayoutOptimizer
+from lib.page.page_compositor import PageCompositor
+from lib.image.resolution import get_optimal_resolution
 
 # -------------------------------
 # ARG PARSER
@@ -40,7 +50,7 @@ def main():
     load_dotenv()
     api_key = os.getenv("api_key")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is not set")
+        raise ValueError("api_key is not set")
 
     if not check_open():
         raise ValueError("ControlNet is not running")
@@ -56,7 +66,22 @@ def main():
     image_base_dir = os.path.join(base_dir, "images")
     os.makedirs(image_base_dir, exist_ok=True)
 
-    # OpenAI client
+    # Page Config
+    PAGE_WIDTH, PAGE_HEIGHT = 1039, 1476
+    MARGIN, GUTTER = 80, 15
+    LIVE_WIDTH = PAGE_WIDTH - (MARGIN * 2)
+    LIVE_HEIGHT = PAGE_HEIGHT - (MARGIN * 2)
+
+    style_model_path = "style_model/style_models_manga109.json"
+    if not os.path.exists(style_model_path):
+        print(f"[WARNING] Style model not found at {style_model_path}. Layout generation may fail.")
+
+    # Initialize layout tools
+    layout_gen = CaoInitialLayout(style_model_path, page_width=LIVE_WIDTH, page_height=LIVE_HEIGHT)
+    layout_optimizer = LayoutOptimizer(style_model_path, page_width=LIVE_WIDTH, page_height=LIVE_HEIGHT, gutter=GUTTER)
+    compositor = PageCompositor(PAGE_WIDTH, PAGE_HEIGHT, MARGIN, MARGIN)
+
+    # USE GPT CLIENT
     client = OpenAI(api_key=api_key)
 
     # ---------------------------
@@ -64,6 +89,7 @@ def main():
     # ---------------------------
     print("Dividing script...")
     elements = divide_script(client, args.script_path, base_dir)
+
     print("Refining elements...")
     elements = refine_elements(elements, base_dir)
 
@@ -73,6 +99,48 @@ def main():
     print("Converting elements to panels...")
     panels = ele2panels(client, elements, base_dir)
 
+    print("Analyzing Storyboard...")
+    storyboard_metadata = analyze_storyboard(client, panels, base_dir)
+
+    # Group panels by page
+    pages = {}
+    for p in storyboard_metadata:
+        pg_idx = p.get("page_index", 1)
+        if pg_idx not in pages: pages[pg_idx] = []
+        pages[pg_idx].append(p)
+
+    print(f"Calculated {len(pages)} pages. Generating layout geometry...")
+
+    page_layouts_map = {}
+    panel_resolutions = {}
+
+    for pg_idx, pg_panels in pages.items():
+        flat_layout = layout_gen.generate_layout(pg_panels, return_tree=False)
+    
+        final_layout = []
+        for p in flat_layout:
+            x, y, w, h = p['bbox']
+            p['polygon'] = [
+                [x, y], 
+                [x + w, y], 
+                [x + w, y + h], 
+                [x, y + h]
+            ]
+            final_layout.append(p)
+    
+        page_layouts_map[pg_idx] = final_layout
+
+        for panel_geom in final_layout:
+            xs = [pt[0] for pt in panel_geom['polygon']]
+            ys = [pt[1] for pt in panel_geom['polygon']]
+            w = max(xs) - min(xs)
+            h = max(ys) - min(ys)
+            res = get_optimal_resolution(int(w), int(h))
+            panel_resolutions[panel_geom['panel_index']] = res
+
+    # ---------------------------
+    # IMAGE PROMPTS
+    # ---------------------------
     print("Generating image prompts...")
     prompts = generate_image_prompts(client, panels, speakers, base_dir)
 
@@ -87,15 +155,14 @@ def main():
         os.makedirs(panel_dir, exist_ok=True)
 
         panel_entry = {"panel_index": i, "panel_dir": panel_dir, "prompt": prompt, "variations": []}
+        target_w, target_h = panel_resolutions.get(i, (512, 512))
 
         for j in range(args.num_images):
             image_path = os.path.join(panel_dir, f"{j:02d}.png")
-
-            # ✔ FIXED: Correct SD call
-            generate_image_with_sd(prompt, image_path)
+            generate_image_with_sd(prompt, image_path, width=target_w, height=target_h)
 
             anime_image_path = os.path.join(panel_dir, f"{j:02d}_anime.png")
-            generate_animepose_image(image_path, prompt, anime_image_path)
+            generate_animepose_image(image_path, prompt, anime_image_path, width=target_w, height=target_h)
 
             openpose_result = run_controlnet_openpose(image_path, anime_image_path)
             bboxes = controlnet2bboxes(openpose_result)
@@ -111,7 +178,6 @@ def main():
                 print(f"Invalid layout for panel {i} image {j}, skipping...")
                 continue
 
-            # Layout scoring
             scored_layouts = similar_layouts(layout)
             layout_options = []
             for idx_ref_layout, scored_layout in enumerate(scored_layouts[:NUM_REFERENCES]):
@@ -137,13 +203,9 @@ def main():
                 "layout_options": layout_options
             })
 
-        # Save JSON per panel
         with open(os.path.join(panel_dir, "scores.json"), "w", encoding="utf-8") as f:
             json.dump(panel_entry, f, indent=4, default=str)
 
-    # ---------------------------
-    # SCORING & WINNER SELECTION
-    # ---------------------------
     clip_model, clip_processor, device = load_clip_model()
     for i, prompt in enumerate(prompts):
         panel_dir = os.path.join(image_base_dir, f"panel{i:03d}")
@@ -212,6 +274,80 @@ def main():
         print(f"[PIPELINE] PDF saved to: {pdf_path}")
     except Exception as e:
         print("[ERROR] PDF generation failed:", e)
+
+    print("\n=== COMPOSITING FINAL MANGA PAGES ===")
+    final_chapter_dir = os.path.join(base_dir, "final_page")
+    os.makedirs(final_chapter_dir, exist_ok=True)
+
+    for pg_idx, layout in page_layouts_map.items():
+        # 1. Collect the "Winner" images for this page
+        page_images = {}
+        for p in layout:
+            p_idx = p['panel_index']
+            # Logic to find the best image for this panel
+            # (You can read the scores.json you just saved to find the winner)
+            panel_dir = os.path.join(image_base_dir, f"panel{p_idx:03d}")
+            scores_path = os.path.join(panel_dir, "scores.json")
+            
+            if os.path.exists(scores_path):
+                with open(scores_path, 'r') as f:
+                    data = json.load(f)
+                    best_img_path = data.get("winner", {}).get("generated_image_path")
+                    if best_img_path:
+                        page_images[p_idx] = best_img_path[:-4] + "_onlyname.png"
+                    else:
+                        best_img_path = os.path.join(panel_dir, "00_anime.png")
+                        page_images[p_idx] = best_img_path
+            else:
+                best_img_path = os.path.join(panel_dir, "00_anime.png")
+                page_images[p_idx] = best_img_path
+
+        # 2. Create the Page
+        output_file = os.path.join(final_chapter_dir, f"page_{pg_idx:02d}.png")
+        compositor.create_page(layout, page_images, output_file)
+
+    page_files = [
+        f for f in os.listdir(final_chapter_dir) 
+        if f.lower().endswith(('.png', '.jpg', '.jpeg')) and f.startswith("page_")
+    ]
+    
+    # Sort them by number (page_01, page_02, etc.)
+    # We use a lambda to extract the number from the filename to sort correctly
+    try:
+        page_files.sort(key=lambda x: int(x.replace("page_", "").split(".")[0]))
+    except ValueError:
+        page_files.sort() # Fallback to alphabetical if naming is weird
+
+    if not page_files:
+        print("⚠️ No pages found to combine.")
+    else:
+        pdf_images = []
+        print(f"  > Found {len(page_files)} pages. converting...")
+        
+        for filename in page_files:
+            file_path = os.path.join(final_chapter_dir, filename)
+            try:
+                # Open image and convert to RGB (PDF doesn't like Alpha channels/Transparency)
+                img = Image.open(file_path).convert("RGB")
+                pdf_images.append(img)
+            except Exception as e:
+                print(f"    ! Error loading {filename}: {e}")
+
+        # 3. Save as PDF
+        if pdf_images:
+            pdf_filename = f"Manga_Chapter_{date}.pdf"
+            pdf_path = os.path.join(base_dir, pdf_filename)
+            
+            pdf_images[0].save(
+                pdf_path, 
+                save_all=True, 
+                append_images=pdf_images[1:]
+            )
+            print(f"✅ PDF Generated Successfully: {pdf_path}")
+        else:
+            print("⚠️ Failed to generate PDF image list.")
+
+    print("\nPipeline Finished Successfully!")
 
 
 if __name__ == "__main__":

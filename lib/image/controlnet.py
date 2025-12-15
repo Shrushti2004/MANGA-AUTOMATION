@@ -116,7 +116,7 @@ def run_controlnet_openpose(image_path, controlnetres_image_path=None, output_pa
             json.dump(response, f, indent=2)
     return ControlNetResult(response, controlnetres_image_path)
 
-def generate_with_controlnet_openpose(pose_image_path, prompt, save_path, model="tAnimeV4Pruned_v20"):
+def generate_with_controlnet_openpose(pose_image_path, prompt, save_path, model="tAnimeV4Pruned_v20", width=512, height=512):
     negative_prompt = (
         "nsfw, (photorealistic:1.5), (color:1.5), (shading:1.4), (smooth:1.4), 3d, render,non-overlapping "
     )
@@ -130,8 +130,8 @@ def generate_with_controlnet_openpose(pose_image_path, prompt, save_path, model=
         "scheduler": "Automatic",
         "steps": 20,
         "cfg_scale": 4,
-        "width": 512,
-        "height": 512,
+        "width": width,
+        "height": height,
         "seed": -1,
         "alwayson_scripts": {
             "controlnet": {

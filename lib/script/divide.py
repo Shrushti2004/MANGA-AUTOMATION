@@ -67,7 +67,7 @@ def richfy_panel(client, panels, output_path, max_retry=3):
 
             # ---------------- GPT-4o (NEW) ----------------
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gemini-2.5-flash",
                 messages=messages,
                 temperature=0.0
             )
